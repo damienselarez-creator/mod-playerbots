@@ -1,6 +1,6 @@
 DROP TABLE IF EXISTS `charsections_dbc`;
 CREATE TABLE `charsections_dbc` (
-  `Id` INT NOT NULL DEFAULT '0',
+  `ID` INT NOT NULL DEFAULT '0',
   `Race` INT NOT NULL DEFAULT '0',
   `Gender` INT NOT NULL DEFAULT '0',
   `GenType` INT NOT NULL DEFAULT '0',
