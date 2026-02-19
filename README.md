@@ -85,6 +85,36 @@ Before building, consider setting the database password. One way to do this is t
 
 Use `docker compose up -d --build` to build and run the server. For more information, including how to create an account and taking backups, refer to the [Install With Docker](https://www.azerothcore.org/wiki/install-with-docker) page.
 
+## Database Compatibility Notice
+
+⚠️ **Important – World Database Alignment**
+
+This branch (`Playerbot`) requires a World database snapshot that is compatible with the corresponding `mod-playerbots/azerothcore-wotlk` revision.
+
+While the project builds successfully when following the installation steps, `worldserver` may fail on first boot if the imported ACDB snapshot does not match the expected schema for this branch.
+
+Typical symptoms of a schema mismatch include:
+
+- Errors about missing tables (e.g. `*_dbc` tables)
+- "Unknown column" errors during DB updates
+- Auto-update process stopping on specific SQL migration files
+- `worldserver` exiting after attempting database updates
+
+If you encounter such errors, this is usually **not** a Docker issue, but a database schema mismatch between:
+
+- The `Playerbot` core branch revision
+- The imported World database snapshot (ACDB)
+- The module SQL state
+
+To resolve this:
+
+- Ensure you are using a compatible ACDB snapshot for the `Playerbot` branch.
+- Avoid mixing manual SQL imports with the automatic update system unless you understand the expected schema state.
+- If necessary, re-import the World database from a known compatible snapshot and restart the update process.
+
+Successful compilation does not guarantee successful database alignment.  
+The first `worldserver` startup is the definitive validation step.
+
 ## Documentation
 
 The [Playerbots Wiki](https://github.com/mod-playerbots/mod-playerbots/wiki) contains an extensive overview of AddOns, commands, raids with programmed bot strategies, and recommended performance configurations. Please note that documentation may be incomplete or out-of-date in some sections, and contributions are welcome.
