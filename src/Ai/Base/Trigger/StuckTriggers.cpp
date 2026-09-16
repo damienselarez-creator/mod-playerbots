@@ -8,7 +8,8 @@
 #include "CellImpl.h"
 #include "PathGenerator.h"
 #include "Playerbots.h"
-#include "MMapFactory.h"
+#include "MapCollisionData.h"
+#include "MMapMgr.h"
 
 bool MoveStuckTrigger::IsActive()
 {
@@ -67,8 +68,6 @@ bool MoveLongStuckTrigger::IsActive()
 
     WorldPosition botPos(bot);
 
-    Cell cell(bot->GetPositionX(), bot->GetPositionY());
-
     GridCoord grid = botPos.getGridCoord();
 
     if (grid.x_coord < 0 || grid.x_coord >= MAX_NUMBER_OF_GRIDS)
@@ -89,8 +88,8 @@ bool MoveLongStuckTrigger::IsActive()
         return true;
     }
 
-    if (cell.GridX() > 0 && cell.GridY() > 0 &&
-        !MMAP::MMapFactory::createOrGetMMapMgr()->loadMap(botPos.getMapId(), cell.GridX(), cell.GridY()))
+    auto const [tileX, tileY] = botPos.getmGridCoord();
+    if (bot->GetMap()->GetMapCollisionData().LoadMMapTile(tileX, tileY) == MMAP::MMAP_LOAD_RESULT_ERROR)
     {
         // LOG_INFO("playerbots", "Bot {} {}:{} <{}> was in unloaded grid {},{} on map {}",
         // bot->GetGUID().ToString().c_str(), bot->GetTeamId() == TEAM_ALLIANCE ? "A" : "H", bot->GetLevel(),

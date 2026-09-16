@@ -3,6 +3,8 @@
  * and/or modify it under version 3 of the License, or (at your option), any later version.
  */
 
+#include "RaceMgr.h"
+
 #include "TravelNode.h"
 
 #include <iomanip>
@@ -54,7 +56,7 @@ void TravelNodePath::calculateCost(bool distanceOnly)
         {
             for (CreatureData const* cData : point.getCreaturesNear(50))  // Agro radius + 5
             {
-                CreatureTemplate const* cInfo = sObjectMgr->GetCreatureTemplate(cData->id1);
+                CreatureTemplate const* cInfo = sObjectMgr->GetCreatureTemplate(cData->id);
                 if (cInfo)
                 {
                     FactionTemplateEntry const* factionEntry = sFactionTemplateStore.LookupEntry(cInfo->faction);
@@ -1595,7 +1597,7 @@ void TravelNodeMap::generateNpcNodes()
         WorldPosition guidP(creatureData->mapid, creatureData->posX, creatureData->posY, creatureData->posZ,
                             creatureData->orientation);
 
-        CreatureTemplate const* cInfo = sObjectMgr->GetCreatureTemplate(creatureData->id1);
+        CreatureTemplate const* cInfo = sObjectMgr->GetCreatureTemplate(creatureData->id);
         if (!cInfo)
             continue;
 
@@ -1660,7 +1662,7 @@ void TravelNodeMap::generateStartNodes()
     startNames[RACE_GNOME] = "Dwarf and Gnome";
     startNames[RACE_TROLL] = "Orc and Troll";
 
-    for (uint32 i = 0; i < MAX_RACES; i++)
+    for (uint32 i = 0; i < RaceMgr::GetMaxRaces(); i++)
     {
         for (uint32 j = 0; j < MAX_CLASSES; j++)
         {

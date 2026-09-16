@@ -60,7 +60,7 @@ bool PlayerbotAIConfig::Initialize()
 {
     LOG_INFO("server.loading", "Initializing mod-playerbots, based on AI Playerbots by ike3 and the original Playerbots by blueboy");
 
-    enabled = sConfigMgr->GetOption<bool>("AiPlayerbot.Enabled", true);
+    enabled = sConfigMgr->GetOption<bool>("AiPlayerbot.Enabled", false);
     if (!enabled)
     {
         LOG_INFO("server.loading", "Playerbots Module is disabled in playerbots.conf");
@@ -179,10 +179,11 @@ bool PlayerbotAIConfig::Initialize()
                                            "179490,141596,160836,160845,179516,176224,181085,176112,128308,128403,"
                                            "165739,165738,175245,175970,176325,176327,123329,2560"),
         disallowedGameObjects);
+    allowRandomBotCreation = sConfigMgr->GetOption<bool>("AiPlayerbot.AllowRandomBotCreation", false);
     botAutologin = sConfigMgr->GetOption<bool>("AiPlayerbot.BotAutologin", false);
-    randomBotAutologin = sConfigMgr->GetOption<bool>("AiPlayerbot.RandomBotAutologin", true);
-    minRandomBots = sConfigMgr->GetOption<int32>("AiPlayerbot.MinRandomBots", 500);
-    maxRandomBots = sConfigMgr->GetOption<int32>("AiPlayerbot.MaxRandomBots", 500);
+    randomBotAutologin = sConfigMgr->GetOption<bool>("AiPlayerbot.RandomBotAutologin", false);
+    minRandomBots = sConfigMgr->GetOption<int32>("AiPlayerbot.MinRandomBots", 0);
+    maxRandomBots = sConfigMgr->GetOption<int32>("AiPlayerbot.MaxRandomBots", 0);
     randomBotUpdateInterval = sConfigMgr->GetOption<int32>("AiPlayerbot.RandomBotUpdateInterval", 20);
     randomBotCountChangeMinInterval =
         sConfigMgr->GetOption<int32>("AiPlayerbot.RandomBotCountChangeMinInterval", 30 * MINUTE);
@@ -653,6 +654,25 @@ bool PlayerbotAIConfig::Initialize()
 
     selfBotLevel = sConfigMgr->GetOption<int32>("AiPlayerbot.SelfBotLevel", 1);
 
+    companionOnly = sConfigMgr->GetOption<bool>("AiPlayerbot.CompanionOnly", true);
+    companionGuid = sConfigMgr->GetOption<uint32>("AiPlayerbot.CompanionGuid", 0);
+    if (companionOnly)
+    {
+        allowRandomBotCreation = false;
+        randomBotAutologin = false;
+        randomBotLoginAtStartup = false;
+        botAutologin = false;
+        addClassCommand = false;
+        allowAccountBots = true;
+        allowGuildBots = false;
+        allowTrustedAccountBots = false;
+        maxAddedBots = 1;
+        minRandomBots = 0;
+        maxRandomBots = 0;
+        selfBotLevel = 0;
+        LOG_INFO("playerbots", "Companion-only mode: manual same-account login, character GUID {}", companionGuid);
+    }
+
     RandomPlayerbotFactory::CreateRandomBots();
     if (World::IsStopped())
     {
@@ -662,7 +682,7 @@ bool PlayerbotAIConfig::Initialize()
     // Assign account types after accounts are created
     sRandomPlayerbotMgr.AssignAccountTypes();
 
-    if (sPlayerbotAIConfig.enabled)
+    if (sPlayerbotAIConfig.enabled && !companionOnly)
     {
         sRandomPlayerbotMgr.Init();
     }

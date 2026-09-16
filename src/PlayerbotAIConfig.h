@@ -80,6 +80,9 @@ public:
     bool IsInPvpProhibitedArea(uint32 id);
 
     bool enabled;
+    bool allowRandomBotCreation = false;
+    bool companionOnly = true;
+    uint32 companionGuid = 0;
     bool disabledWithoutRealPlayer;
     bool EnableICCBuffs;
     bool allowAccountBots, allowGuildBots, allowTrustedAccountBots;

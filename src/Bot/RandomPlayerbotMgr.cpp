@@ -3,6 +3,8 @@
  * and/or modify it under version 3 of the License, or (at your option), any later version.
  */
 
+#include "RaceMgr.h"
+
 #include "RandomPlayerbotMgr.h"
 
 #include <WorldSessionMgr.h>
@@ -1864,7 +1866,7 @@ void RandomPlayerbotMgr::PrepareTeleportCache()
         "MIN( c.guid ) guid "
         "FROM "
         "creature c "
-        "INNER JOIN creature_template t ON c.id1 = t.entry "
+        "INNER JOIN creature_template t ON c.id = t.entry "
         "WHERE "
         "t.npcflag = 0 "
         "AND t.lootid != 0 "
@@ -1886,7 +1888,7 @@ void RandomPlayerbotMgr::PrepareTeleportCache()
         "count(*) >= 2) "
         "AS g "
         "INNER JOIN creature c ON g.guid = c.guid "
-        "INNER JOIN creature_template t on c.id1 = t.entry "
+        "INNER JOIN creature_template t on c.id = t.entry "
         "ORDER BY "
         "t.minlevel;",
         sPlayerbotAIConfig.randomBotMapsAsString.c_str());
@@ -1935,7 +1937,7 @@ void RandomPlayerbotMgr::PrepareTeleportCache()
             "c.guid "
             "FROM "
             "creature c "
-            "INNER JOIN creature_template t on c.id1 = t.entry "
+            "INNER JOIN creature_template t on c.id = t.entry "
             "WHERE "
             "t.npcflag & 73728 "
             "AND map IN ({}) "
@@ -2000,7 +2002,7 @@ void RandomPlayerbotMgr::PrepareTeleportCache()
         }
 
         // add all initial position
-        for (uint32 i = 1; i < MAX_RACES; i++)
+        for (uint32 i = 1; i < RaceMgr::GetMaxRaces(); i++)
         {
             for (uint32 j = 1; j < MAX_CLASSES; j++)
             {
@@ -2013,7 +2015,7 @@ void RandomPlayerbotMgr::PrepareTeleportCache()
 
                 for (int32 l = 1; l <= 5; l++)
                 {
-                    if ((1 << (i - 1)) & RACEMASK_ALLIANCE)
+                    if ((1 << (i - 1)) & RaceMgr::GetAllianceRaceMask())
                         allianceStarterPerLevelCache[(uint8)l].push_back(pos);
                     else
                         hordeStarterPerLevelCache[(uint8)l].push_back(pos);
@@ -2035,7 +2037,7 @@ void RandomPlayerbotMgr::PrepareTeleportCache()
         "t.entry "
         "FROM "
         "creature c "
-        "INNER JOIN creature_template t on c.id1 = t.entry "
+        "INNER JOIN creature_template t on c.id = t.entry "
         "WHERE "
         "t.npcflag & 131072 "
         "AND t.npcflag != 135298 "
@@ -2494,7 +2496,7 @@ uint32 RandomPlayerbotMgr::GetZoneLevel(uint16 mapId, float teleX, float teleY, 
     uint32 level = 0;
     QueryResult results = WorldDatabase.Query(
         "SELECT AVG(t.minlevel) minlevel, AVG(t.maxlevel) maxlevel FROM creature c "
-        "INNER JOIN creature_template t ON c.id1 = t.entry WHERE map = {} AND minlevel > 1 AND ABS(position_x - {}) < "
+        "INNER JOIN creature_template t ON c.id = t.entry WHERE map = {} AND minlevel > 1 AND ABS(position_x - {}) < "
         "{} AND ABS(position_y - {}) < {}",
         mapId, teleX, sPlayerbotAIConfig.randomBotTeleportDistance / 2, teleY,
         sPlayerbotAIConfig.randomBotTeleportDistance / 2);
@@ -3131,7 +3133,7 @@ void RandomPlayerbotMgr::PrintStats()
 
     std::map<uint8, uint32> lvlPerRace;
     std::map<uint8, uint32> lvlPerClass;
-    for (uint8 race = RACE_HUMAN; race < MAX_RACES; ++race)
+    for (uint8 race = RACE_HUMAN; race < RaceMgr::GetMaxRaces(); ++race)
     {
         perRace[race] = 0;
         lvlPerRace[race] = 0;
@@ -3280,7 +3282,7 @@ void RandomPlayerbotMgr::PrintStats()
     }
 
     LOG_INFO("playerbots", "Bots race:");
-    for (uint8 race = RACE_HUMAN; race < MAX_RACES; ++race)
+    for (uint8 race = RACE_HUMAN; race < RaceMgr::GetMaxRaces(); ++race)
     {
         if (perRace[race])
         {
@@ -3501,7 +3503,7 @@ CreatureData const* RandomPlayerbotMgr::GetCreatureDataByEntry(uint32 entry)
     if (entry != 0)
     {
         for (auto const& itr : sObjectMgr->GetAllCreatureData())
-            if (itr.second.id1 == entry)
+            if (itr.second.id == entry)
                 return &itr.second;
     }
 

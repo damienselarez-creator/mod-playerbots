@@ -82,14 +82,22 @@
 ####################################################################################################
 
 # Enable or disable Playerbots module
-AiPlayerbot.Enabled = 1
+AiPlayerbot.Enabled = 0
+
+# Explicit opt-in for generated accounts/characters and random-account maintenance.
+# Keep disabled when using manually created account companions.
+AiPlayerbot.AllowRandomBotCreation = 0
+
+# Only manually requested companions on the same account. Zero GUID permits any own alt.
+AiPlayerbot.CompanionOnly = 1
+AiPlayerbot.CompanionGuid = 0
 
 # Enable randombot system
-AiPlayerbot.RandomBotAutologin = 1
+AiPlayerbot.RandomBotAutologin = 0
 
 # Randombot count
-AiPlayerbot.MinRandomBots = 500
-AiPlayerbot.MaxRandomBots = 500
+AiPlayerbot.MinRandomBots = 0
+AiPlayerbot.MaxRandomBots = 0
 
 # Randombot accounts
 # If you are not using any expansion at all, you may have to set this manually, in which case please
@@ -576,13 +584,13 @@ AiPlayerbot.BotCheats = "food,taxi,raid"
 # Min random delay before the 1st follower bot clicks the flight-master (ms)
 AiPlayerbot.BotTaxiDelayMinMs = 350
 
-# Upper bound for the overall taxi delay window (ms) – larger spreads big raids
+# Upper bound for the overall taxi delay window (ms) â€“ larger spreads big raids
 AiPlayerbot.BotTaxiDelayMaxMs = 5000
 
 # Fixed gap added per group-slot so bots never take off together (ms)
 AiPlayerbot.BotTaxiGapMs = 200
 
-# Extra small randomness added to each gap so launches don’t look robotic (ms)
+# Extra small randomness added to each gap so launches donâ€™t look robotic (ms)
 AiPlayerbot.BotTaxiGapJitterMs = 100
 
 #
@@ -639,7 +647,7 @@ AiPlayerbot.RandomBotMaxLevel = 80
 # Default: 0 (disabled)
 AiPlayerbot.SyncLevelWithPlayers = 0
 
-# Mark many quests ≤ bot level as complete (slows down bot creation)
+# Mark many quests â‰¤ bot level as complete (slows down bot creation)
 # Default: 0 (disabled)
 AiPlayerbot.PreQuests = 0
 
@@ -675,7 +683,7 @@ AiPlayerbot.LimitTalentsExpansion = 0
 AiPlayerbot.EnableRandomBotTrading = 1
 
 # Configure message prefixes which will be excluded in analysis in trade action to open trade window
-AiPlayerbot.TradeActionExcludedPrefixes = "RPLL_H_,DBMv4,{звезда} Questie,{rt1} Questie"
+AiPlayerbot.TradeActionExcludedPrefixes = "RPLL_H_,DBMv4,{Ð·Ð²ÐµÐ·Ð´Ð°} Questie,{rt1} Questie"
 
 #
 #
@@ -934,14 +942,14 @@ AiPlayerbot.RestrictedHealerDPSMaps = "33,34,36,43,47,48,70,90,109,129,209,229,2
 # Default: 1 (enabled)
 AiPlayerbot.EnableNewRpgStrategy = 1
 
-# Control probability weights for RPG status of bots. Takes effect only when the status meets its premise.​
+# Control probability weights for RPG status of bots. Takes effect only when the status meets its premise.â€‹
 # Sum of weights need not be 100. Set to 0 to disable the status.
 #
 # WanderRandom  (Default: 15  Move randomly nearby to find and kill mobs)
-# WanderNpc     (Default: 20  Randomly interact with nearby NPCs​)
+# WanderNpc     (Default: 20  Randomly interact with nearby NPCsâ€‹)
 # GoGrind       (Default: 15  Go to nearby level-appropriate locations to grind for killing mobs)
-# GoCamp        (Default: 10  Return to a nearby camp depending on innkeeper/flightmaster)​
-# DoQuest       (Default: 60  Select quest from the quest log and head to the location to attempt completion​)
+# GoCamp        (Default: 10  Return to a nearby camp depending on innkeeper/flightmaster)â€‹
+# DoQuest       (Default: 60  Select quest from the quest log and head to the location to attempt completionâ€‹)
 # TravelFlight  (Default: 15  Go to the nearest flightmaster and fly to a level-appropriate area)
 # Rest          (Default: 5   Take a break for a while and do nothing)
 AiPlayerbot.RpgStatusProbWeight.WanderRandom = 15
@@ -1271,7 +1279,7 @@ AiPlayerbot.MaxRandomBotReviveTime = 300
 AiPlayerbot.MinRandomBotTeleportInterval = 3600
 AiPlayerbot.MaxRandomBotTeleportInterval = 18000
 
-# Number of seconds bots flagged as permanent stay in the world (31,104,000 ≈ 1 year)
+# Number of seconds bots flagged as permanent stay in the world (31,104,000 â‰ˆ 1 year)
 # Default: 31104000
 AiPlayerbot.PermanentlyInWorldTime = 31104000
 

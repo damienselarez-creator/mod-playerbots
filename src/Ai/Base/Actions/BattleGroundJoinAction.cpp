@@ -214,6 +214,9 @@ bool BGJoinAction::canJoinBg(BattlegroundQueueTypeId queueTypeId, BattlegroundBr
 
     // check if the bracket exists for the bot's level for the specific Battleground/Arena type
     Battleground* bg = sBattlegroundMgr->GetBattlegroundTemplate(bgTypeId);
+    if (!bg || !bot->CanJoinToBattleground(bg))
+        return false;
+
     uint32 mapId = bg->GetMapId();
     PvPDifficultyEntry const* pvpDiff = GetBattlegroundBracketByLevel(mapId, bot->GetLevel());
     if (!pvpDiff)
@@ -349,10 +352,6 @@ bool BGJoinAction::isUseful()
     if (bot->IsInCombat())
         return false;
 
-    // check Deserter debuff
-    if (!bot->CanJoinToBattleground())
-        return false;
-
     // check if has free queue slots (pointless as already making sure not in queue)
     // keeping just in case.
     if (!bot->HasFreeBattlegroundQueueId())
@@ -399,7 +398,7 @@ bool BGJoinAction::JoinQueue(uint32 type)
     BattlegroundBracketId bracketId;
 
     Battleground* bg = sBattlegroundMgr->GetBattlegroundTemplate(bgTypeId);
-    if (!bg)
+    if (!bg || !bot->CanJoinToBattleground(bg))
         return false;
 
     uint32 mapId = bg->GetMapId();

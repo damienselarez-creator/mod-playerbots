@@ -7,7 +7,7 @@
 
 #include "Event.h"
 #include "Playerbots.h"
-#include "ThreatMgr.h"
+#include "ThreatManager.h"
 
 bool TellTargetAction::Execute(Event event)
 {
@@ -41,21 +41,15 @@ bool TellAttackersAction::Execute(Event event)
 
     botAI->TellMaster("--- Threat ---");
 
-    HostileReference* ref = bot->getHostileRefMgr().getFirst();
-    if (!ref)
-        return true;
-
-    while (ref)
+    for (auto const& [guid, ref] : bot->GetThreatMgr().GetThreatenedByMeList())
     {
-        ThreatMgr* threatMgr = ref->GetSource();
-        Unit* unit = threatMgr->GetOwner();
+        Unit* unit = ref->GetOwner();
         float threat = ref->GetThreat();
 
         std::ostringstream out;
         out << unit->GetName() << " (" << threat << ")";
         botAI->TellMaster(out);
 
-        ref = ref->next();
     }
 
     return true;

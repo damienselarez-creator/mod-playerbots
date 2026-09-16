@@ -14,7 +14,7 @@ class FindTargetForTankStrategy : public FindNonCcTargetStrategy
 public:
     FindTargetForTankStrategy(PlayerbotAI* botAI) : FindNonCcTargetStrategy(botAI), minThreat(0) {}
 
-    void CheckAttacker(Unit* creature, ThreatMgr* threatMgr) override
+    void CheckAttacker(Unit* creature, ThreatManager* threatMgr) override
     {
         if (!creature || !creature->IsAlive())
         {
@@ -28,10 +28,8 @@ public:
             result = creature;
         }
         // neglect if victim is main tank, or no victim (for untauntable target)
-        if (threatMgr->getCurrentVictim())
+        if (Unit* victim = threatMgr->GetCurrentVictim())
         {
-            // float max_threat = threatMgr->GetThreat(threatMgr->getCurrentVictim()->getTarget());
-            Unit* victim = threatMgr->getCurrentVictim()->getTarget();
             if (victim && victim->ToPlayer() && botAI->IsMainTank(victim->ToPlayer()))
             {
                 return;
@@ -53,7 +51,7 @@ class FindTankTargetSmartStrategy : public FindTargetStrategy
 public:
     FindTankTargetSmartStrategy(PlayerbotAI* botAI) : FindTargetStrategy(botAI) {}
 
-    void CheckAttacker(Unit* attacker, ThreatMgr* threatMgr) override
+    void CheckAttacker(Unit* attacker, ThreatManager* threatMgr) override
     {
         if (Group* group = botAI->GetBot()->GetGroup())
         {

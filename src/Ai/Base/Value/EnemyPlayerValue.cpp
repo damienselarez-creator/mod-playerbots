@@ -5,6 +5,7 @@
 
 #include "EnemyPlayerValue.h"
 
+#include "CombatManager.h"
 #include "Playerbots.h"
 #include "ServerFacade.h"
 #include "Vehicle.h"
@@ -43,11 +44,9 @@ Unit* EnemyPlayerValue::Calculate()
     // 1. Check units we are currently in combat with.
     std::vector<Unit*> targets;
     Unit* pVictim = bot->GetVictim();
-    HostileReference* pReference = bot->getHostileRefMgr().getFirst();
-    while (pReference)
+    for (auto const& [guid, combat] : bot->GetCombatManager().GetPvPCombatRefs())
     {
-        ThreatMgr* threatMgr = pReference->GetSource();
-        if (Unit* pTarget = threatMgr->GetOwner())
+        if (Unit* pTarget = combat->GetOther(bot))
         {
             if (pTarget != pVictim && pTarget->IsPlayer() && pTarget->CanSeeOrDetect(bot) &&
                 bot->IsWithinDist(pTarget, VISIBILITY_DISTANCE_NORMAL))
@@ -67,7 +66,6 @@ Unit* EnemyPlayerValue::Calculate()
             }
         }
 
-        pReference = pReference->next();
     }
 
     if (!targets.empty())

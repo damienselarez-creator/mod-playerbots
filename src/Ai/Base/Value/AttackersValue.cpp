@@ -92,21 +92,14 @@ void AttackersValue::AddAttackersOf(Player* player, std::unordered_set<Unit*>& t
     if (!player || !player->IsInWorld() || player->IsBeingTeleported())
         return;
 
-    HostileRefMgr& refManager = player->getHostileRefMgr();
-    HostileReference* ref = refManager.getFirst();
-    if (!ref)
-        return;
-
-    while (ref)
+    for (auto const& [guid, ref] : player->GetThreatMgr().GetThreatenedByMeList())
     {
-        ThreatMgr* threatMgr = ref->GetSource();
-        Unit* attacker = threatMgr->GetOwner();
+        Unit* attacker = ref->GetOwner();
 
         if (player->IsValidAttackTarget(attacker) &&
             player->GetDistance2d(attacker) < sPlayerbotAIConfig.sightDistance)
             targets.insert(attacker);
 
-        ref = ref->next();
     }
 }
 
@@ -131,7 +124,6 @@ bool AttackersValue::hasRealThreat(Unit* attacker)
     return attacker && attacker->IsInWorld() && attacker->IsAlive() && !attacker->IsPolymorphed() &&
            // !attacker->isInRoots() &&
            !attacker->IsFriendlyTo(bot);
-    (attacker->GetThreatMgr().getCurrentVictim() || dynamic_cast<Player*>(attacker));
 }
 
 bool AttackersValue::IsPossibleTarget(Unit* attacker, Player* bot, float /*range*/)
@@ -241,7 +233,7 @@ bool AttackersValue::IsPossibleTarget(Unit* attacker, Player* bot, float /*range
 bool AttackersValue::IsValidTarget(Unit* attacker, Player* bot)
 {
     return IsPossibleTarget(attacker, bot) && bot->IsWithinLOSInMap(attacker);
-    // (attacker->GetThreatMgr().getCurrentVictim() || attacker->GetGuidValue(UNIT_FIELD_TARGET) ||
+    // (attacker->GetThreatMgr().GetCurrentVictim() || attacker->GetGuidValue(UNIT_FIELD_TARGET) ||
     // attacker->GetGUID().IsPlayer() || attacker->GetGUID() ==
     // GET_PLAYERBOT_AI(bot)->GetAiObjectContext()->GetValue<ObjectGuid>("pull target")->Get());
 }
@@ -261,7 +253,7 @@ bool PossibleAddsValue::Calculate()
             if (!add->IsInWorld() || add->IsDuringRemoveFromWorld())
                 continue;
 
-            if (!add->GetTarget() && !add->GetThreatMgr().getCurrentVictim() && add->IsHostileTo(bot))
+            if (!add->GetTarget() && !add->GetThreatMgr().GetCurrentVictim() && add->IsHostileTo(bot))
             {
                 for (ObjectGuid const attackerGUID : attackers)
                 {

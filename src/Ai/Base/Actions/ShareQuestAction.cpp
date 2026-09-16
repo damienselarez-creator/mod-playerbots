@@ -7,6 +7,7 @@
 
 #include "Event.h"
 #include "Playerbots.h"
+#include "QuestPackets.h"
 
 bool ShareQuestAction::Execute(Event event)
 {
@@ -29,8 +30,8 @@ bool ShareQuestAction::Execute(Event event)
         uint32 logQuest = bot->GetQuestSlotQuestId(slot);
         if (logQuest == entry)
         {
-            WorldPacket p;
-            p << entry;
+            WorldPackets::Quest::PushQuestToParty p{WorldPacket(CMSG_PUSHQUESTTOPARTY)};
+            p.QuestId = entry;
             bot->GetSession()->HandlePushQuestToParty(p);
             botAI->TellMaster("Quest shared");
             return true;
@@ -96,8 +97,8 @@ bool AutoShareQuestAction::Execute(Event event)
         if (!partyNeedsQuest)
             continue;
 
-        WorldPacket p;
-        p << logQuest;
+        WorldPackets::Quest::PushQuestToParty p{WorldPacket(CMSG_PUSHQUESTTOPARTY)};
+        p.QuestId = logQuest;
         bot->GetSession()->HandlePushQuestToParty(p);
         botAI->TellMaster("Quest shared");
         shared = true;

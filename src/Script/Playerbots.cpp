@@ -558,6 +558,10 @@ void AddPlayerbotsSecureLoginScripts();
 
 void AddPlayerbotsScripts()
 {
+    // Do not register database or gameplay hooks while the module is disabled.
+    if (!sConfigMgr->GetOption<bool>("AiPlayerbot.Enabled", false))
+        return;
+
     new PlayerbotsDatabaseScript();
     new PlayerbotsPlayerScript();
     new PlayerbotsMiscScript();

@@ -14,7 +14,7 @@ public:
     {
     }
 
-    void CheckAttacker(Unit* attacker, ThreatMgr* threatMgr) override
+    void CheckAttacker(Unit* attacker, ThreatManager* threatMgr) override
     {
         if (botAI->HasAura(spell, attacker))
             result = attacker;

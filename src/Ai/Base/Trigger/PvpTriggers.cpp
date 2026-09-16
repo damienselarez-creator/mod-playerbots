@@ -297,7 +297,8 @@ bool PlayerWantsInBattlegroundTrigger::IsActive()
     if (bot->GetBattleground() && bot->GetBattleground()->GetStatus() == STATUS_IN_PROGRESS)
         return false;
 
-    if (!bot->CanJoinToBattleground())
+    // Destination-specific permissions are checked by BGJoinAction.
+    if (bot->HasAura(26013))
         return false;
 
     return true;

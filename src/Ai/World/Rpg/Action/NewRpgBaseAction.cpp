@@ -1,3 +1,5 @@
+#include "QuestPackets.h"
+
 #include "NewRpgBaseAction.h"
 
 #include "BroadcastHelper.h"
@@ -535,8 +537,8 @@ bool NewRpgBaseAction::OrganizeQuestLog()
             bot->GetQuestStatus(questId) == QUEST_STATUS_FAILED)
         {
             LOG_DEBUG("playerbots", "[New RPG] {} drop quest {}", bot->GetName(), questId);
-            WorldPacket packet(CMSG_QUESTLOG_REMOVE_QUEST);
-            packet << (uint8)i;
+            WorldPackets::Quest::QuestLogRemoveQuest packet{WorldPacket(CMSG_QUESTLOG_REMOVE_QUEST)};
+            packet.Slot = uint8(i);
             bot->GetSession()->HandleQuestLogRemoveQuest(packet);
             if (botAI->GetMaster())
                 botAI->TellMasterNoFacing("Quest dropped " + ChatHelper::FormatQuest(quest));
@@ -560,8 +562,8 @@ bool NewRpgBaseAction::OrganizeQuestLog()
         if (quest->GetZoneOrSort() < 0 || (quest->GetZoneOrSort() > 0 && quest->GetZoneOrSort() != bot->GetZoneId()))
         {
             LOG_DEBUG("playerbots", "[New RPG] {} drop quest {}", bot->GetName(), questId);
-            WorldPacket packet(CMSG_QUESTLOG_REMOVE_QUEST);
-            packet << (uint8)i;
+            WorldPackets::Quest::QuestLogRemoveQuest packet{WorldPacket(CMSG_QUESTLOG_REMOVE_QUEST)};
+            packet.Slot = uint8(i);
             bot->GetSession()->HandleQuestLogRemoveQuest(packet);
             if (botAI->GetMaster())
                 botAI->TellMasterNoFacing("Quest dropped " + ChatHelper::FormatQuest(quest));
@@ -582,8 +584,8 @@ bool NewRpgBaseAction::OrganizeQuestLog()
 
         const Quest* quest = sObjectMgr->GetQuestTemplate(questId);
         LOG_DEBUG("playerbots", "[New RPG] {} drop quest {}", bot->GetName(), questId);
-        WorldPacket packet(CMSG_QUESTLOG_REMOVE_QUEST);
-        packet << (uint8)i;
+        WorldPackets::Quest::QuestLogRemoveQuest packet{WorldPacket(CMSG_QUESTLOG_REMOVE_QUEST)};
+        packet.Slot = uint8(i);
         bot->GetSession()->HandleQuestLogRemoveQuest(packet);
         if (botAI->GetMaster())
             botAI->TellMasterNoFacing("Quest dropped " + ChatHelper::FormatQuest(quest));

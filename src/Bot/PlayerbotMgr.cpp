@@ -98,6 +98,12 @@ void PlayerbotHolder::AddPlayerBot(ObjectGuid playerGuid, uint32 masterAccountId
     if (!accountId)
         return;
 
+    // No population login or cross-account control in companion mode.
+    if (sPlayerbotAIConfig.companionOnly &&
+        (!masterAccountId || accountId != masterAccountId ||
+         (sPlayerbotAIConfig.companionGuid && playerGuid.GetCounter() != sPlayerbotAIConfig.companionGuid)))
+        return;
+
     WorldSession* masterSession = masterAccountId ? sWorldSessionMgr->FindSession(masterAccountId) : nullptr;
     Player* masterPlayer = masterSession ? masterSession->GetPlayer() : nullptr;
 
@@ -376,7 +382,7 @@ void PlayerbotHolder::LogoutPlayerBot(ObjectGuid guid)
             logout = true;
 
         if (bot->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_RESTING) || bot->HasUnitState(UNIT_STATE_IN_FLIGHT) ||
-            botWorldSessionPtr->GetSecurity() >= (AccountTypes)sWorld->getIntConfig(CONFIG_INSTANT_LOGOUT))
+            botWorldSessionPtr->HasPermission(rbac::RBAC_PERM_INSTANT_LOGOUT))
         {
             logout = true;
         }
@@ -384,7 +390,7 @@ void PlayerbotHolder::LogoutPlayerBot(ObjectGuid guid)
         if (master &&
             (master->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_RESTING) || master->HasUnitState(UNIT_STATE_IN_FLIGHT) ||
              (masterWorldSessionPtr &&
-              masterWorldSessionPtr->GetSecurity() >= (AccountTypes)sWorld->getIntConfig(CONFIG_INSTANT_LOGOUT))))
+              masterWorldSessionPtr->HasPermission(rbac::RBAC_PERM_INSTANT_LOGOUT))))
         {
             logout = true;
         }
@@ -847,7 +853,7 @@ std::string const PlayerbotHolder::ProcessBotCommand(std::string const cmd, Obje
 
         if (cmd == "refresh=raid")
         {  // TODO: This function is not perfect yet. If you are already in a raid,
-            // after the command is executed, the AI ​​needs to go back online or exit the raid and re-enter.
+            // after the command is executed, the AI â€‹â€‹needs to go back online or exit the raid and re-enter.
             PlayerbotFactory factory(bot, bot->GetLevel());
             factory.UnbindInstance();
             return "ok";

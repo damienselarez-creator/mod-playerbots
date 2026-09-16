@@ -3,6 +3,8 @@
 * and/or modify it under version 3 of the License, or (at your option), any later version.
 */
 
+#include "RaceMgr.h"
+
 #include "RandomPlayerbotFactory.h"
 
 #include "AccountMgr.h"
@@ -65,7 +67,7 @@ Player* RandomPlayerbotFactory::CreateRandomBot(WorldSession* session, uint8 cls
     const bool alliance = static_cast<bool>(urand(0, 1));
 
     std::vector<uint8> raceOptions;
-    for (uint8 race = RACE_HUMAN; race < MAX_RACES; ++race)
+    for (uint8 race = RACE_HUMAN; race < RaceMgr::GetMaxRaces(); ++race)
     {
         // skip disabled with config races
         if ((1 << (race - 1)) & sWorld->getIntConfig(CONFIG_CHARACTER_CREATING_DISABLED_RACEMASK))
@@ -449,6 +451,10 @@ uint32 RandomPlayerbotFactory::CalculateAvailableCharsPerAccount()
 
 void RandomPlayerbotFactory::CreateRandomBots()
 {
+    // Existing account companions do not require generated accounts or characters.
+    if (!sPlayerbotAIConfig.allowRandomBotCreation)
+        return;
+
     /* multi-thread here is meaningless? since the async db operations */
 
     if (sPlayerbotAIConfig.deleteRandomBotAccounts)
@@ -623,7 +629,7 @@ void RandomPlayerbotFactory::CreateRandomBots()
         else
             password = accountName;
 
-        AccountMgr::CreateAccount(accountName, password);
+        sAccountMgr->CreateAccount(accountName, password);
 
         LOG_DEBUG("playerbots", "Account {} created for random bots", accountName.c_str());
     }

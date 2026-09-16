@@ -3,6 +3,8 @@
  * and/or modify it under version 3 of the License, or (at your option), any later version.
  */
 
+#include "RaceMgr.h"
+
 #include "TravelMgr.h"
 
 #include <iomanip>
@@ -10,7 +12,8 @@
 
 #include "Talentspec.h"
 #include "ChatHelper.h"
-#include "MMapFactory.h"
+#include "MapCollisionData.h"
+#include "MMapMgr.h"
 #include "MapMgr.h"
 #include "PathGenerator.h"
 #include "Playerbots.h"
@@ -626,79 +629,26 @@ std::vector<WorldPosition> WorldPosition::frommGridCoord(mGridCoord GridCoord)
 
 void WorldPosition::loadMapAndVMap(uint32 mapId, uint8 x, uint8 y)
 {
+    if (x >= MAX_NUMBER_OF_GRIDS || y >= MAX_NUMBER_OF_GRIDS || !sMapStore.LookupEntry(mapId))
+        return;
+
+    if (TravelMgr::instance().isBadMmap(mapId, x, y))
+        return;
+
+    // Collision data belongs to the base map and is shared with its instances.
+    Map* map = sMapMgr->CreateBaseMap(mapId);
+    if (map->GetMapCollisionData().LoadMMapTile(x, y) == MMAP::MMAP_LOAD_RESULT_ERROR)
+        TravelMgr::instance().addBadMmap(mapId, x, y);
+
     std::string const fileName = "load_map_grid.csv";
-
-    if (isOverworld() && false || false)
+    if (sPlayerbotAIConfig.hasLog(fileName))
     {
-        if (!MMAP::MMapFactory::createOrGetMMapMgr()->loadMap(mapId, x, y))
-            if (sPlayerbotAIConfig.hasLog(fileName))
-            {
-                std::ostringstream out;
-                out << sPlayerbotAIConfig.GetTimestampStr();
-                out << "+00,\"mmap\", " << x << "," << y << "," << (TravelMgr::instance().isBadMmap(mapId, x, y) ? "0" : "1")
-                    << ",";
-                printWKT(fromGridCoord(GridCoord(x, y)), out, 1, true);
-                sPlayerbotAIConfig.log(fileName, out.str().c_str());
-            }
-    }
-    else
-    {
-        // This needs to be disabled or maps will not load.
-        // Needs more testing to check for impact on movement.
-        if (false)
-            if (!TravelMgr::instance().isBadVmap(mapId, x, y))
-            {
-                // load VMAPs for current map/grid...
-                const MapEntry* i_mapEntry = sMapStore.LookupEntry(mapId);
-                //const char* mapName = i_mapEntry ? i_mapEntry->name[sWorld->GetDefaultDbcLocale()] : "UNNAMEDMAP\x0"; //not used, (usage are commented out below), line marked for removal.
-
-                int vmapLoadResult = VMAP::VMapFactory::createOrGetVMapMgr()->loadMap(
-                    (sWorld->GetDataPath() + "vmaps").c_str(), mapId, x, y);
-                switch (vmapLoadResult)
-                {
-                    case VMAP::VMAP_LOAD_RESULT_OK:
-                        // LOG_ERROR("playerbots", "VMAP loaded name:{}, id:{}, x:{}, y:{} (vmap rep.: x:{}, y:{})",
-                        // mapName, mapId, x, y, x, y);
-                        break;
-                    case VMAP::VMAP_LOAD_RESULT_ERROR:
-                        // LOG_ERROR("playerbots", "Could not load VMAP name:{}, id:{}, x:{}, y:{} (vmap rep.: x:{},
-                        // y:{})", mapName, mapId, x, y, x, y);
-                        TravelMgr::instance().addBadVmap(mapId, x, y);
-                        break;
-                    case VMAP::VMAP_LOAD_RESULT_IGNORED:
-                        TravelMgr::instance().addBadVmap(mapId, x, y);
-                        // LOG_INFO("playerbots", "Ignored VMAP name:{}, id:{}, x:{}, y:{} (vmap rep.: x:{}, y:{})",
-                        // mapName, mapId, x, y, x, y);
-                        break;
-                }
-
-                if (sPlayerbotAIConfig.hasLog(fileName))
-                {
-                    std::ostringstream out;
-                    out << sPlayerbotAIConfig.GetTimestampStr();
-                    out << "+00,\"vmap\", " << x << "," << y << ", " << (TravelMgr::instance().isBadVmap(mapId, x, y) ? "0" : "1")
-                        << ",";
-                    printWKT(frommGridCoord(mGridCoord(x, y)), out, 1, true);
-                    sPlayerbotAIConfig.log(fileName, out.str().c_str());
-                }
-            }
-
-        if (!TravelMgr::instance().isBadMmap(mapId, x, y))
-        {
-            // load navmesh
-            if (!MMAP::MMapFactory::createOrGetMMapMgr()->loadMap(mapId, x, y))
-                TravelMgr::instance().addBadMmap(mapId, x, y);
-
-            if (sPlayerbotAIConfig.hasLog(fileName))
-            {
-                std::ostringstream out;
-                out << sPlayerbotAIConfig.GetTimestampStr();
-                out << "+00,\"mmap\", " << x << "," << y << "," << (TravelMgr::instance().isBadMmap(mapId, x, y) ? "0" : "1")
-                    << ",";
-                printWKT(fromGridCoord(GridCoord(x, y)), out, 1, true);
-                sPlayerbotAIConfig.log(fileName, out.str().c_str());
-            }
-        }
+        std::ostringstream out;
+        out << sPlayerbotAIConfig.GetTimestampStr();
+        out << "+00,\"mmap\", " << x << "," << y << ","
+            << (TravelMgr::instance().isBadMmap(mapId, x, y) ? "0" : "1") << ",";
+        printWKT(fromGridCoord(GridCoord(x, y)), out, 1, true);
+        sPlayerbotAIConfig.log(fileName, out.str().c_str());
     }
 }
 
@@ -843,7 +793,7 @@ uint32 WorldPosition::getUnitsAggro(GuidVector& units, Player* bot)
 
 void FindPointCreatureData::operator()(CreatureData const& creatureData)
 {
-    if (!entry || creatureData.id1 == entry)
+    if (!entry || creatureData.id == entry)
         if ((!point || creatureData.mapid == point.getMapId()) &&
             (!radius || point.sqDistance(WorldPosition(creatureData.mapid, creatureData.posX, creatureData.posY,
                                                        creatureData.posZ)) < radius * radius))
@@ -994,7 +944,7 @@ bool GuidPosition::IsCreatureOrGOAccessible()
 GuidPosition::GuidPosition(WorldObject* wo) : ObjectGuid(wo->GetGUID()), WorldPosition(wo), loadedFromDB(false) {}
 
 GuidPosition::GuidPosition(CreatureData const& creData)
-    : ObjectGuid(HighGuid::Unit, creData.id1, creData.spawnId),
+    : ObjectGuid(HighGuid::Unit, creData.id, creData.spawnId),
       WorldPosition(creData.mapid, creData.posX, creData.posY, creData.posZ, creData.orientation)
 {
     loadedFromDB = true;
@@ -1820,14 +1770,14 @@ void TravelMgr::LoadQuestTravelTable()
     for (auto& creatureData : WorldPosition().getCreaturesNear())
     {
         t_unit.type = 0;
-        t_unit.entry = creatureData->id1;
+        t_unit.entry = creatureData->id;
         t_unit.map = creatureData->mapid;
         t_unit.x = creatureData->posX;
         t_unit.y = creatureData->posY;
         t_unit.z = creatureData->posZ;
         t_unit.o = creatureData->orientation;
 
-        entryCount[creatureData->id1]++;
+        entryCount[creatureData->id]++;
 
         units.push_back(t_unit);
     }
@@ -1855,7 +1805,7 @@ void TravelMgr::LoadQuestTravelTable()
     /*
     //                          0    1  2   3          4          5          6           7     8
     std::string const query = "SELECT 0,guid,id,map,position_x,position_y,position_z,orientation, (SELECT COUNT(*) FROM
-    creature k WHERE c.id1 = k.id1) FROM creature c UNION ALL SELECT
+    creature k WHERE c.id = k.id) FROM creature c UNION ALL SELECT
     1,guid,id,map,position_x,position_y,position_z,orientation, (SELECT COUNT(*) FROM gameobject h WHERE h.id = g.id)
     FROM gameobject g";
 
@@ -2449,7 +2399,7 @@ void TravelMgr::LoadQuestTravelTable()
         startNames[RACE_DRAENEI] = "Draenei";
         startNames[RACE_BLOODELF] = "Blood Elf";
 
-        for (uint32 i = 0; i < MAX_RACES; i++)
+        for (uint32 i = 0; i < RaceMgr::GetMaxRaces(); i++)
         {
             for (uint32 j = 0; j < MAX_CLASSES; j++)
             {
@@ -2853,7 +2803,7 @@ void TravelMgr::LoadQuestTravelTable()
     {
         for (CreatureData const* cData : WorldPosition().getCreaturesNear())
         {
-            CreatureTemplate const* cInfo = sObjectMgr->GetCreatureTemplate(cData->id1);
+            CreatureTemplate const* cInfo = sObjectMgr->GetCreatureTemplate(cData->id);
             if (!cInfo)
                 continue;
 
@@ -3334,7 +3284,7 @@ void TravelMgr::LoadQuestTravelTable()
 
             std::ostringstream out;
 
-            for (uint8 race = RACE_HUMAN; race < MAX_RACES; race++)
+            for (uint8 race = RACE_HUMAN; race < RaceMgr::GetMaxRaces(); race++)
             {
                 for (uint8 cls = CLASS_WARRIOR; cls < MAX_CLASSES; ++cls)
                 {
