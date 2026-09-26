@@ -96,6 +96,12 @@ void PlayerbotHolder::AddPlayerBot(ObjectGuid playerGuid, uint32 masterAccountId
     if (!accountId)
         return;
 
+    // No population login or cross-account control in companion mode.
+    if (sPlayerbotAIConfig.companionOnly &&
+        (!masterAccountId || accountId != masterAccountId ||
+         (sPlayerbotAIConfig.companionGuid && playerGuid.GetCounter() != sPlayerbotAIConfig.companionGuid)))
+        return;
+
     WorldSession* masterSession = masterAccountId ? sWorldSessionMgr->FindSession(masterAccountId) : nullptr;
     Player* masterPlayer = masterSession ? masterSession->GetPlayer() : nullptr;
 
