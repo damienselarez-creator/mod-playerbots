@@ -5,6 +5,8 @@
  */
 
 #include "AddLootAction.h"
+#include "CompanionErrands.h"
+
 #include "CellImpl.h"
 #include "Event.h"
 #include "GridNotifiers.h"
@@ -45,6 +47,10 @@ bool AddAllLootAction::AddLoot(ObjectGuid guid) { return AI_VALUE(LootObjectStac
 
 bool AddGatheringLootAction::AddLoot(ObjectGuid guid)
 {
+    // Managed companions gather through the bounded, interruptible errand action.
+    if (IsManagedCompanion(botAI))
+        return false;
+
     LootObject loot(bot, guid);
 
     WorldObject* wo = loot.GetWorldObject(bot);

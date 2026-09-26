@@ -15,6 +15,7 @@
 #include "ForceRebuff.h"
 #include "Item.h"
 #include "NewRpgInfo.h"
+#include "SelfbotCycle.h"
 #include "NewRpgStrategy.h"
 #include "PlayerbotAIBase.h"
 #include "PlayerbotAIConfig.h"
@@ -383,6 +384,8 @@ private:
     time_t time;
 };
 
+struct CompanionErrandState;
+
 class PlayerbotAI : public PlayerbotAIBase
 {
 public:
@@ -605,6 +608,8 @@ public:
     NewRpgInfo rpgInfo;
     NewRpgStatistic rpgStatistic;
     std::unordered_set<uint32> lowPriorityQuest;
+    SelfbotCycle selfbotCycle;
+    std::shared_ptr<CompanionErrandState> companionErrands;
     time_t bgReleaseAttemptTime = 0;
     ForceRebuffState forceRebuff;
 

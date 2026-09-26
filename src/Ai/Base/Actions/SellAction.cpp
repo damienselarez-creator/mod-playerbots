@@ -1,3 +1,5 @@
+#include "CompanionErrands.h"
+#include "SelfbotInventory.h"
 /*
  * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
  * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -149,6 +151,9 @@ void SellAction::Sell(FindItemVisitor* visitor)
 
 void SellAction::Sell(Item* item)
 {
+    if (IsSelfbotInventoryManaged(botAI) || IsCompanionInventoryManaged(botAI))
+        return; // The cycle owns protected, quantity-limited sales.
+
     std::ostringstream out;
 
     GuidVector vendors = botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get();

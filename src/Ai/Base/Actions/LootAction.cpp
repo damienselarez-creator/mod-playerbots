@@ -6,6 +6,9 @@
 
 #include "LootAction.h"
 #include "BroadcastHelper.h"
+#include "SelfbotProfessions.h"
+#include "CompanionErrands.h"
+
 #include "ChatHelper.h"
 #include "Event.h"
 #include "GuildMgr.h"
@@ -402,7 +405,8 @@ bool StoreLootAction::Execute(Event event)
         if (lootslot_type != LOOT_SLOT_TYPE_ALLOW_LOOT && lootslot_type != LOOT_SLOT_TYPE_OWNER)
             continue;
 
-        if (loot_type != LOOT_SKINNING && !IsLootAllowed(itemid, botAI))
+        if (loot_type != LOOT_SKINNING && !IsCompanionGatherLoot(botAI, guid) &&
+            !IsLootAllowed(itemid, botAI))
             continue;
 
         ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemid);
@@ -461,6 +465,7 @@ bool StoreLootAction::Execute(Event event)
     }
 
     AI_VALUE(LootObjectStack*, "available loot")->Remove(guid);
+    FinishCompanionGather(botAI, guid);
 
     // release loot
     WorldPacket* packet = new WorldPacket(CMSG_LOOT_RELEASE, 8);
@@ -486,6 +491,9 @@ bool StoreLootAction::IsLootAllowed(uint32 itemid, PlayerbotAI* botAI)
     uint32 max = proto->MaxCount;
     if (max > 0 && botAI->GetBot()->HasItemCount(itemid, max, true))
         return false;
+
+    if (IsSelfbotProfessionMaterial(botAI, itemid))
+        return true;
 
     if (proto->StartQuest)
     {

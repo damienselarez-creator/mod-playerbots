@@ -2723,3 +2723,15 @@ AiPlayerbot.TargetPosRecalcDistance = 0.1
 
 # Allow bots to be summoned near innkeepers
 AiPlayerbot.SummonAtInnkeepersEnabled = 1
+
+# Enable buffs in ICC to make Heroic easier and more casual.
+# 30% more damage, 40% damage reduction (tank bots), increased all resistances, reduced threat for non tank bots, increased threat for tank bots.
+# Buffs will be applied on PP, Sindragosa and Lich King
+
+AiPlayerbot.EnableICCBuffs = 1
+# Optional companion errands, exact character names and two primary skill IDs.
+# Example: Elvidia:171:182 (Alchemy, Herbalism). Multiple profiles separated by ;.
+# Grouped companions train while their master rests in a town/inn, using their own gold.
+# Herbalism detours: 40 yards search, 60 yards leash, no combat, 30 seconds maximum.
+# A command from the master cancels errands for 60 seconds. Empty disables the feature.
+AiPlayerbot.CompanionErrands = ""

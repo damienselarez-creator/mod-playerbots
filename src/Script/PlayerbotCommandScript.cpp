@@ -11,6 +11,7 @@
 #include "PlayerbotMgr.h"
 #include "RandomPlayerbotMgr.h"
 #include "ScriptMgr.h"
+#include "SelfbotCycle.h"
 
 using namespace Acore::ChatCommands;
 
@@ -34,6 +35,7 @@ public:
 
         static ChatCommandTable playerbotsCommandTable = {
             {"bot", HandlePlayerbotCommand, SEC_PLAYER, Console::No},
+            {"cycle", HandleSelfbotCycleCommand, SEC_PLAYER, Console::No},
             {"gtask", HandleGuildTaskCommand, SEC_GAMEMASTER, Console::Yes},
             {"pmon", HandlePerfMonCommand, SEC_GAMEMASTER, Console::Yes},
             {"rndbot", HandleRandomPlayerbotCommand, SEC_GAMEMASTER, Console::Yes},
@@ -203,4 +205,10 @@ public:
     }
 };
 
-void AddPlayerbotsCommandscripts() { new playerbots_commandscript(); }
+void AddPlayerbotsCommandscripts()
+{
+    new playerbots_commandscript();
+    LOG_INFO("playerbots", "[SelfbotCycle] Test commands ready: .playerbots cycle start 2|4");
+    LOG_INFO("playerbots", "[SelfbotInventory] Protected sales, repair budget and automatic pause ready");
+    LOG_INFO("playerbots", "[SelfbotQuestSurvey] Persistent sector routing ready: .playerbots cycle survey");
+}

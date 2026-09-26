@@ -1,3 +1,5 @@
+#include "CompanionErrands.h"
+#include "SelfbotInventory.h"
 /*
  * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
  * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -339,6 +341,9 @@ bool CastRandomSpellAction::castSpell(uint32 spellId, WorldObject* wo)
 
 bool DisEnchantRandomItemAction::Execute(Event /*event*/)
 {
+    if (IsSelfbotInventoryManaged(botAI) || IsCompanionInventoryManaged(botAI))
+        return false;
+
     std::vector<Item*> items =
         AI_VALUE2(std::vector<Item*>, "inventory items", "usage " + std::to_string(ITEM_USAGE_DISENCHANT));
     std::reverse(items.begin(), items.end());

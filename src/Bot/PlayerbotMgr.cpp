@@ -1052,10 +1052,20 @@ std::vector<std::string> PlayerbotHolder::HandlePlayerbotCommand(char const* arg
 
     if (!strcmp(cmd, "self"))
     {
+        auto* session = master->GetSession();
+        if (!SelfbotManualSessionAllowed(session->IsBot(), !session->IsSocketClosed(), session->IsLoggingOut()))
+        {
+            messages.push_back("Selfbot requires an active manual client connection");
+            return messages;
+        }
         if (GET_PLAYERBOT_AI(master))
         {
             messages.push_back("Disable player botAI");
             delete GET_PLAYERBOT_AI(master);
+            master->InterruptNonMeleeSpells(false);
+            master->AttackStop();
+            master->GetMotionMaster()->Clear();
+            master->StopMoving();
         }
         else if (sPlayerbotAIConfig.selfBotLevel == 0)
             messages.push_back("Self-bot is disabled");
@@ -1067,6 +1077,7 @@ std::vector<std::string> PlayerbotHolder::HandlePlayerbotCommand(char const* arg
             PlayerbotsMgr::instance().AddPlayerbotData(master, true);
             GET_PLAYERBOT_AI(master)->SetMaster(master);
             PlayerbotRepository::instance().Load(GET_PLAYERBOT_AI(master));
+            ResumeSelfbotCycle(GET_PLAYERBOT_AI(master));
         }
 
         return messages;
@@ -1657,8 +1668,7 @@ void PlayerbotMgr::OnPlayerLogin(Player* player)
     // set locale priority for bot texts
     PlayerbotTextMgr::instance().AddLocalePriority(usedLocale);
 
-    if (sPlayerbotAIConfig.selfBotLevel > 2)
-        HandlePlayerbotCommand("self", player);
+    // Selfbot activation always requires an explicit command after manual login.
 
     if (!sPlayerbotAIConfig.botAutologin)
         return;

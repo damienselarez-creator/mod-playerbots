@@ -1,3 +1,5 @@
+#include "SelfbotInventory.h"
+#include "CompanionErrands.h"
 /*
  * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
  * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -230,6 +232,7 @@ PlayerbotAI::PlayerbotAI(Player* bot)
 
 PlayerbotAI::~PlayerbotAI()
 {
+    SaveSelfbotCycle(this);
     for (uint8 i = 0; i < BOT_STATE_MAX; i++)
     {
         if (engines[i])
@@ -251,16 +254,21 @@ void PlayerbotAI::UpdateAI(uint32 elapsed, bool minimal)
     else
         nextAICheckDelay = 0;
 
+    if (bot && IsSelfBot(bot) && bot->GetSession() &&
+        !SelfbotManualSessionAllowed(bot->GetSession()->IsBot(), !bot->GetSession()->IsSocketClosed(),
+                                    bot->GetSession()->IsLoggingOut()))
+    {
+        bot->InterruptNonMeleeSpells(false);
+        bot->AttackStop();
+        bot->StopMoving();
+        return;
+    }
+
     // Early return if bot is in invalid state
     if (!bot || !bot->GetSession() || !bot->IsInWorld() || bot->IsBeingTeleported() ||
         bot->GetSession()->IsLoggingOut() || bot->IsDuringRemoveFromWorld())
         return;
-
-    // Bots send no movement opcodes, so m_lastFallZ stays frozen and Player::IsFalling() (a Z test
-    // against it) blocks LFG teleports. Unit::IsFalling() is the flag test, so real falls keep theirs.
-    if (!bot->Unit::IsFalling())
-        bot->SetFallInformation(0, bot->GetPositionZ());
-
+    // Bots send no movement opcodes, so m_lastFallZ stays frozen and Player::IsFalling() (a Z test`r`n    // against it) blocks LFG teleports. Unit::IsFalling() is the flag test, so real falls keep theirs.`r`n    if (!bot->Unit::IsFalling())`r`n        bot->SetFallInformation(0, bot->GetPositionZ());`r`n`r`n    UpdateCompanionErrands(this, elapsed);`r`n`r`n    if (UpdateSelfbotInventory(this, elapsed))`r`n        return;`r`n`r`n    UpdateSelfbotCycle(this, elapsed);`r`n
     // Handle cheat options (set bot health and power if cheats are enabled)
     if (bot->IsAlive() &&
         (static_cast<uint32>(GetCheat()) > 0 || static_cast<uint32>(sPlayerbotAIConfig.botCheatMask) > 0))
@@ -590,7 +598,11 @@ void PlayerbotAI::HandleCommands()
             continue;
         }
 
-        if (!helper.ParseChatCommand(command, owner) && it->GetType() == CHAT_MSG_WHISPER)
+        bool const parsed = helper.ParseChatCommand(command, owner);
+        if (parsed && owner == GetMaster())
+            CancelCompanionErrands(this);
+
+        if (!parsed && it->GetType() == CHAT_MSG_WHISPER)
         {
             // ostringstream out; out << "Unknown command " << command;
             // TellPlayer(out);

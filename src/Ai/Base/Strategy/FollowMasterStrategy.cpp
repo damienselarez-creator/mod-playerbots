@@ -9,6 +9,7 @@
 std::vector<NextAction> FollowMasterStrategy::getDefaultActions()
 {
     return {
+        NextAction("companion errands", 8.0f),
         NextAction("follow", 1.0f)
     };
 }

@@ -8,6 +8,7 @@
 #define PLAYERBOTS_ACTIONCONTEXT_H
 
 #include "AddLootAction.h"
+#include "CompanionErrands.h"
 #include "AttackAction.h"
 #include "AutoMaintenanceOnLevelupAction.h"
 #include "BattleGroundJoinAction.h"
@@ -131,6 +132,7 @@ public:
         creators["release loot"] = &ActionContext::release_loot;
         creators["shoot"] = &ActionContext::shoot;
         creators["follow"] = &ActionContext::follow;
+        creators["companion errands"] = &ActionContext::companion_errands;
         creators["move from group"] = &ActionContext::move_from_group;
         creators["flee to group leader"] = &ActionContext::flee_to_group_leader;
         creators["runaway"] = &ActionContext::runaway;
@@ -347,6 +349,7 @@ private:
     static Action* sit(PlayerbotAI* botAI) { return new SitAction(botAI); }
     static Action* runaway(PlayerbotAI* botAI) { return new RunAwayAction(botAI); }
     static Action* follow(PlayerbotAI* botAI) { return new FollowAction(botAI); }
+    static Action* companion_errands(PlayerbotAI* ai) { return new CompanionErrandAction(ai); }
     static Action* move_from_group(PlayerbotAI* botAI) { return new MoveFromGroupAction(botAI); }
     static Action* flee_to_group_leader(PlayerbotAI* botAI) { return new FleeToGroupLeaderAction(botAI); }
     static Action* add_gathering_loot(PlayerbotAI* botAI) { return new AddGatheringLootAction(botAI); }

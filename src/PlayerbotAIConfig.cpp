@@ -716,6 +716,10 @@ bool PlayerbotAIConfig::Initialize()
     syncQuestForPlayer = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncQuestForPlayer", false);
     dropObsoleteQuests = sConfigMgr->GetOption<bool>("AiPlayerbot.DropObsoleteQuests", true);
     allowLearnTrainerSpells = sConfigMgr->GetOption<bool>("AiPlayerbot.AllowLearnTrainerSpells", true);
+    autoTrainSpells = sConfigMgr->GetOption<std::string>("AiPlayerbot.AutoTrainSpells", "yes");
+    companionProfessionPlans = CompanionErrands::ParsePlans(
+        sConfigMgr->GetOption<std::string>("AiPlayerbot.CompanionErrands", ""));
+    LOG_INFO("playerbots", "[CompanionErrands] {} configured companion(s)", companionProfessionPlans.size());
     autoPickTalents = sConfigMgr->GetOption<bool>("AiPlayerbot.AutoPickTalents", true);
     autoUpgradeEquip = sConfigMgr->GetOption<bool>("AiPlayerbot.AutoUpgradeEquip", true);
     hunterWolfPet = sConfigMgr->GetOption<int32>("AiPlayerbot.HunterWolfPet", 0);
@@ -749,7 +753,27 @@ bool PlayerbotAIConfig::Initialize()
     randomBotArenaTeamMaxRating = sConfigMgr->GetOption<int32>("AiPlayerbot.RandomBotArenaTeamMaxRating", 2000);
     randomBotArenaTeamMinRating = sConfigMgr->GetOption<int32>("AiPlayerbot.RandomBotArenaTeamMinRating", 1000);
 
-    selfBotLevel = sConfigMgr->GetOption<int32>("AiPlayerbot.SelfBotLevel", 1);
+    selfBotLevel = std::min<int32>(2, sConfigMgr->GetOption<int32>("AiPlayerbot.SelfBotLevel", 1));
+
+    companionOnly = sConfigMgr->GetOption<bool>("AiPlayerbot.CompanionOnly", true);
+    companionGuid = sConfigMgr->GetOption<uint32>("AiPlayerbot.CompanionGuid", 0);
+    if (companionOnly)
+    {
+        randomBotAutologin = false;
+        botAutologin = false;
+        addClassCommand = false;
+        allowAccountBots = true;
+        allowGuildBots = false;
+        allowTrustedAccountBots = false;
+        maxAddedBots = 1;
+        minRandomBots = 0;
+        maxRandomBots = 0;
+        // Manual selfbot uses the connected player, independently of companion restrictions.
+        LOG_INFO("playerbots", "Companion-only mode: manual same-account login, character GUID {}", companionGuid);
+    }
+
+    LOG_INFO("playerbots", "[SelfbotAccess] Effective level {} (0=disabled, 1=GM, 2=players); manual activation only",
+             selfBotLevel);
 
     RandomPlayerbotFactory::CreateRandomBots();
     if (World::IsStopped())

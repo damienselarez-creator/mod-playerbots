@@ -8,6 +8,7 @@
 #define PLAYERBOTS_PLAYERBOTAICONFIG_H
 
 #include "DBCEnums.h"
+#include "CompanionErrandPolicy.h"
 #include "SharedDefines.h"
 #include <algorithm>
 #include <map>
@@ -103,6 +104,8 @@ public:
     bool IsInPvpProhibitedArea(uint32 id);
 
     bool enabled;
+    bool companionOnly = true;
+    uint32 companionGuid = 0;
     bool disabledWithoutRealPlayer;
     bool EnableICCBuffs;
     bool allowAccountBots, allowGuildBots, allowTrustedAccountBots;
@@ -383,6 +386,8 @@ public:
     bool syncQuestForPlayer;
     bool dropObsoleteQuests;
     bool allowLearnTrainerSpells;
+    std::string autoTrainSpells;
+    CompanionErrands::Plans companionProfessionPlans;
     bool autoPickTalents;
     bool autoUpgradeEquip;
     int32 hunterWolfPet;

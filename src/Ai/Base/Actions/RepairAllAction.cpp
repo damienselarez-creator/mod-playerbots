@@ -1,3 +1,4 @@
+#include "CompanionErrands.h"
 /*
  * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
  * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -11,6 +12,9 @@
 
 bool RepairAllAction::Execute(Event /*event*/)
 {
+    if (IsCompanionInventoryManaged(botAI))
+        return false; // The safe-zone errand owns paid repairs and its reserve.
+
     GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
     for (ObjectGuid const guid : npcs)
     {

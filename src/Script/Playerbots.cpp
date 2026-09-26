@@ -1,3 +1,4 @@
+#include "SelfbotInventory.h"
 /*
  * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
  * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -7,6 +8,8 @@
 #include "Playerbots.h"
 #include "BattleGroundTactics.h"
 #include "BattlefieldScript.h"
+#include "MotionMaster.h"
+
 #include "Channel.h"
 #include "CheckMountStateAction.h"
 #include "Config.h"
@@ -213,7 +216,19 @@ public:
 
         if (botAI != nullptr)
         {
-            botAI->UpdateAI(diff);
+            auto* session = player->GetSession();
+            if (IsSelfBot(botAI->GetBot()) && session &&
+                (!SelfbotManualSessionAllowed(session->IsBot(), !session->IsSocketClosed(), session->IsLoggingOut()) ||
+                 SelfbotInventoryPauseRequested(botAI)))
+            {
+                player->InterruptNonMeleeSpells(false);
+                player->AttackStop();
+                player->GetMotionMaster()->Clear();
+                player->StopMoving();
+                delete botAI; // A reconnect must issue a new activation command.
+            }
+            else
+                botAI->UpdateAI(diff);
         }
 
         if (PlayerbotMgr* playerbotMgr = GET_PLAYERBOT_MGR(player))

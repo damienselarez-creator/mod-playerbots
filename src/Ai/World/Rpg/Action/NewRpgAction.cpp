@@ -233,6 +233,9 @@ bool StartRpgDoQuestAction::Execute(Event event)
 
 bool NewRpgStatusUpdateAction::Execute(Event /*event*/)
 {
+    if (botAI->selfbotCycle.enabled && IsSelfBot(botAI->GetBot()))
+        return ExecuteSelfbotCycle(botAI);
+
     NewRpgInfo& info = botAI->rpgInfo;
     NewRpgStatus status = info.GetStatus();
     switch (status)

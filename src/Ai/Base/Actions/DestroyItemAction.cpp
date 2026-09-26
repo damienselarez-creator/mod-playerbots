@@ -1,3 +1,5 @@
+#include "CompanionErrands.h"
+#include "SelfbotInventory.h"
 /*
  * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
  * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
@@ -25,6 +27,9 @@ bool DestroyItemAction::Execute(Event event)
 
 void DestroyItemAction::DestroyItem(FindItemVisitor* visitor)
 {
+    if (IsSelfbotInventoryManaged(botAI))
+        return;
+
     IterateItems(visitor);
     std::vector<Item*> items = visitor->GetResult();
     for (Item* item : items)
@@ -41,6 +46,9 @@ bool SmartDestroyItemAction::isUseful() { return !IsRealPlayer(botAI->GetMaster(
 
 bool SmartDestroyItemAction::Execute(Event /*event*/)
 {
+    if (IsCompanionInventoryManaged(botAI))
+        return false;
+
     uint8 bagSpace = AI_VALUE(uint8, "bag space");
 
     if (bagSpace < 90)
