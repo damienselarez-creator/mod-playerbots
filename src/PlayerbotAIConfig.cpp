@@ -759,6 +759,8 @@ bool PlayerbotAIConfig::Initialize()
     companionGuid = sConfigMgr->GetOption<uint32>("AiPlayerbot.CompanionGuid", 0);
     if (companionOnly)
     {
+        // Companion mode is deliberately population-free. Keep this as a hard runtime
+        // invariant instead of relying on the distribution defaults in playerbots.conf.
         randomBotAutologin = false;
         botAutologin = false;
         addClassCommand = false;
@@ -768,21 +770,32 @@ bool PlayerbotAIConfig::Initialize()
         maxAddedBots = 1;
         minRandomBots = 0;
         maxRandomBots = 0;
+        randomBotAccountCount = 0;
+        addClassAccountPoolSize = 0;
+
         // Manual selfbot uses the connected player, independently of companion restrictions.
-        LOG_INFO("playerbots", "Companion-only mode: manual same-account login, character GUID {}", companionGuid);
+        LOG_INFO("playerbots", "Companion-only mode: manual same-account login, character GUID {}; population factory disabled",
+                 companionGuid);
     }
 
     LOG_INFO("playerbots", "[SelfbotAccess] Effective level {} (0=disabled, 1=GM, 2=players); manual activation only",
              selfBotLevel);
 
-    RandomPlayerbotFactory::CreateRandomBots();
-    if (World::IsStopped())
+    if (!companionOnly)
     {
-        return true;
-    }
+        RandomPlayerbotFactory::CreateRandomBots();
+        if (World::IsStopped())
+        {
+            return true;
+        }
 
-    // Assign account types after accounts are created
-    sRandomPlayerbotMgr.AssignAccountTypes();
+        // Assign account types after accounts are created.
+        sRandomPlayerbotMgr.AssignAccountTypes();
+    }
+    else
+    {
+        LOG_INFO("playerbots", "Companion-only mode: skipped random/addclass account generation and account-type assignment");
+    }
 
     if (sPlayerbotAIConfig.enabled)
     {
