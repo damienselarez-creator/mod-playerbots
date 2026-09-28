@@ -82,12 +82,24 @@
 # Enable or disable Playerbots module
 AiPlayerbot.Enabled = 1
 
+# Companion-only mode for a private, persistent companion server.
+# When enabled, random-bot and AddClass population generation is bypassed entirely,
+# cross-account/guild/trusted-account bot control is disabled, and only one manually
+# added same-account companion can be active at a time.
+# Default: 1 in this fork.
+AiPlayerbot.CompanionOnly = 1
+
+# Optional exact character GUID allowed as the companion.
+# 0 allows any character from the master's own account (still limited to one at a time).
+# Set a non-zero GUID to restrict manual companion login to that character only.
+AiPlayerbot.CompanionGuid = 0
+
 # Enable randombot system
-AiPlayerbot.RandomBotAutologin = 1
+AiPlayerbot.RandomBotAutologin = 0
 
 # Randombot count
-AiPlayerbot.MinRandomBots = 500
-AiPlayerbot.MaxRandomBots = 500
+AiPlayerbot.MinRandomBots = 0
+AiPlayerbot.MaxRandomBots = 0
 
 # Randombot accounts
 # Set to 0 to automatically calculate needed accounts based on MaxRandomBots, EnablePeriodicOnlineOffline
@@ -99,7 +111,7 @@ AiPlayerbot.RandomBotAccountCount = 0
 # Addclass accounts
 # Number of accounts created for bots reserved for the addclass command. As with randombots, each account has
 # 10 bots (or 9 if WotLK is disabled), one bot for each class.
-AiPlayerbot.AddClassAccountPoolSize = 50
+AiPlayerbot.AddClassAccountPoolSize = 0
 
 # Prefix for created bot accounts (of any type).
 # Do not change this prefix while there are existing bot accounts.
@@ -137,7 +149,7 @@ AiPlayerbot.MaxAddedBots = 40
 
 # Enable/Disable creating bots by addclass command (0 = GM only, 1 = enabled)
 # Default: 1 (enabled)
-AiPlayerbot.AddClassCommand = 1
+AiPlayerbot.AddClassCommand = 0
 
 # Bot group invitation permission level (0 = GM only, 1 = accept based on level, 2 = always accept)
 # Default: 1 (accept based on level)
