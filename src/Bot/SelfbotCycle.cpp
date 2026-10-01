@@ -249,7 +249,7 @@ bool HandleSelfbotCycleCommand(ChatHandler* handler, char const* args)
     if (!player)
         return false;
     auto* session = player->GetSession();
-    if (!SelfbotManualSessionAllowed(session->IsBot(), !session->IsSocketClosed(), session->IsLoggingOut()))
+    if (!SelfbotManualSessionAllowed(session->IsHeadless(), !session->IsSocketClosed(), session->IsLoggingOut()))
     {
         handler->SendSysMessage("[Cycle] Une connexion manuelle active est obligatoire.");
         return true;

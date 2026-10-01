@@ -47,9 +47,35 @@ namespace
         return bot->GetGroup() && bot->GetGroup() == master->GetGroup();
     }
 
+    uint32 Settlement(uint32 areaId, uint32 zoneId)
+    {
+        auto const* zone = sAreaTableStore.LookupEntry(zoneId);
+        if (zone && (zone->flags & AREA_FLAG_CAPITAL))
+            return zoneId;
+        auto const* area = sAreaTableStore.LookupEntry(areaId);
+        if (area && (area->flags & (AREA_FLAG_TOWN | AREA_FLAG_CAPITAL)))
+            return areaId;
+        return 0;
+    }
+
+    uint32 Settlement(Player* player)
+    {
+        return Settlement(player->GetAreaId(), player->GetZoneId());
+    }
+
     bool InTown(Player* player)
     {
-        return player->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_RESTING);
+        return Settlement(player) || player->HasFlag(PLAYER_FLAGS, PLAYER_FLAGS_RESTING);
+    }
+
+    bool IsSecondaryProfession(uint32 skill)
+    {
+        return skill == SKILL_FISHING || skill == SKILL_COOKING || skill == SKILL_FIRST_AID;
+    }
+
+    bool IsProfession(uint32 skill)
+    {
+        return CompanionErrands::IsPrimary(skill) || IsSecondaryProfession(skill);
     }
 
     uint32 ProfessionForSpell(uint32 id, uint32 depth = 0)
@@ -57,13 +83,13 @@ namespace
         if (depth > 3)
             return 0;
         auto const* line = PlayerbotSpellRepository::Instance().GetSkillLine(id);
-        if (line && CompanionErrands::IsPrimary(line->SkillLine))
+        if (line && IsProfession(line->SkillLine))
             return line->SkillLine;
         auto const* spell = sSpellMgr->GetSpellInfo(id);
         if (spell)
             for (auto const& effect : spell->Effects)
             {
-                if (effect.Effect == SPELL_EFFECT_SKILL && CompanionErrands::IsPrimary(effect.MiscValue))
+                if (effect.Effect == SPELL_EFFECT_SKILL && IsProfession(effect.MiscValue))
                     return effect.MiscValue;
                 if (effect.Effect == SPELL_EFFECT_LEARN_SPELL)
                     if (uint32 skill = ProfessionForSpell(effect.TriggerSpell, depth + 1))
@@ -300,6 +326,7 @@ struct CompanionErrandState
     uint32 spawn = 0;
     uint32 map = 0;
     uint32 zone = 0;
+    uint32 settlement = 0;
     uint32 reserve = 0;
     uint32 learned = 0;
     ObjectGuid target;
@@ -381,6 +408,13 @@ namespace
     {
         auto& state = *ai->companionErrands;
         StopTrip(ai, false);
+        // Continue local errands while the master remains in the same settlement.
+        if (IsManagedCompanion(ai) && Eligible(ai) && state.settlement &&
+            Settlement(ai->GetMaster()) == state.settlement)
+        {
+            state.townDue = true;
+            return;
+        }
         state.kind = Errand::Return;
         state.closest = std::numeric_limits<float>::max();
         state.events.RescheduleEvent(Deadline, Milliseconds(180000));
@@ -401,9 +435,10 @@ namespace
         {
             if (!classTrainer)
             {
-                uint32 skill = CompanionErrands::IsPrimary(spell.ReqSkillLine) ? spell.ReqSkillLine :
+                uint32 skill = IsProfession(spell.ReqSkillLine) ? spell.ReqSkillLine :
                     ProfessionForSpell(spell.SpellId);
-                if (!skill || (skill != skills[0] && skill != skills[1]))
+                if (!skill || (!bot->HasSkill(skill) && skill != skills[0] && skill != skills[1] &&
+                    !IsSecondaryProfession(skill)))
                     continue;
             }
             uint32 cost = uint32(std::floor(spell.MoneyCost * discount));
@@ -465,7 +500,8 @@ void UpdateCompanionErrands(PlayerbotAI* ai, uint32 elapsed)
     if (!Eligible(ai) || master->GetGUID() != state.owner || bot->GetMapId() != state.map ||
         ((state.kind == Errand::Trainer || state.kind == Errand::PoisonVendor || state.kind == Errand::Bags) &&
             (!InTown(master) || master->GetZoneId() != state.zone ||
-            master->GetDistance(state.x, state.y, state.z) > TownRadius)) ||
+            (state.settlement ? Settlement(master) != state.settlement :
+                master->GetDistance(state.x, state.y, state.z) > TownRadius))) ||
         (state.kind == Errand::Herb && (bot->GetDistance(master) > 60.0f ||
             master->GetDistance(state.x, state.y, state.z) > 60.0f)))
         CancelCompanionErrands(ai);
@@ -517,11 +553,13 @@ bool CompanionErrandAction::Execute(Event)
         state.owner = master->GetGUID();
         state.map = bot->GetMapId();
         state.zone = master->GetZoneId();
+        state.settlement = Settlement(master);
         if (state.townDue)
         {
             state.townDue = false;
             state.events.RescheduleEvent(TownScan, Milliseconds(60000));
-            if (InTown(master) && !master->isMoving() && bot->GetDistance(master) < 30.0f)
+            if (InTown(master) && (IsManagedCompanion(botAI) ||
+                (!master->isMoving() && bot->GetDistance(master) < 30.0f)))
             {
                 state.reserve = std::max(state.reserve, bot->GetMoney() / 5);
                 double best = std::numeric_limits<double>::max();
@@ -540,15 +578,23 @@ bool CompanionErrandAction::Execute(Event)
                 Errand selected = Errand::None;
                 for (auto const& [spawn, data] : sObjectMgr->GetAllCreatureData())
                 {
-                    if (data.mapid != state.map || !(data.phaseMask & bot->GetPhaseMask()) ||
-                        master->GetDistance(data.posX, data.posY, data.posZ) > TownRadius)
+                    if (data.mapid != state.map || !(data.phaseMask & bot->GetPhaseMask()))
                         continue;
                     auto const* creature = sObjectMgr->GetCreatureTemplate(data.id);
-                    auto* trainer = sObjectMgr->GetTrainer(data.id);
-                    auto const* faction = creature ? sFactionTemplateStore.LookupEntry(creature->faction) : nullptr;
-                    if (!faction || !bot->GetFactionTemplateEntry()->IsFriendlyTo(*faction) ||
-                        bot->GetMap()->GetZoneId(bot->GetPhaseMask(), data.posX, data.posY, data.posZ) != state.zone)
+                    if (!creature || !(creature->npcflag &
+                        (UNIT_NPC_FLAG_VENDOR | UNIT_NPC_FLAG_REPAIR | UNIT_NPC_FLAG_TRAINER)))
                         continue;
+                    auto const* faction = sFactionTemplateStore.LookupEntry(creature->faction);
+                    if (!faction || !bot->GetFactionTemplateEntry()->IsFriendlyTo(*faction))
+                        continue;
+                    uint32 areaId = bot->GetMap()->GetAreaId(bot->GetPhaseMask(), data.posX, data.posY, data.posZ);
+                    uint32 zoneId = bot->GetMap()->GetZoneId(bot->GetPhaseMask(), data.posX, data.posY, data.posZ);
+                    if (zoneId != state.zone)
+                        continue;
+                    if (state.settlement ? Settlement(areaId, zoneId) != state.settlement :
+                        master->GetDistance(data.posX, data.posY, data.posZ) > TownRadius)
+                        continue;
+                    auto* trainer = sObjectMgr->GetTrainer(data.id);
                     Errand candidate = Errand::None;
                     double priority = 0;
                     if (!state.rejectedBagVendors.count(uint32(spawn)) &&

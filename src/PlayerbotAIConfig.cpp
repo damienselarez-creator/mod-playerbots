@@ -719,6 +719,11 @@ bool PlayerbotAIConfig::Initialize()
     autoTrainSpells = sConfigMgr->GetOption<std::string>("AiPlayerbot.AutoTrainSpells", "yes");
     companionProfessionPlans = CompanionErrands::ParsePlans(
         sConfigMgr->GetOption<std::string>("AiPlayerbot.CompanionErrands", ""));
+    // Town-only profiles retain existing professions; explicit profession plans take precedence.
+    for (std::string const& name : split(
+        sConfigMgr->GetOption<std::string>("AiPlayerbot.CompanionTownCharacters", ""), ','))
+        if (!name.empty())
+            companionProfessionPlans.emplace(name, std::array<uint32_t, 2>{0, 0});
     LOG_INFO("playerbots", "[CompanionErrands] {} configured companion(s)", companionProfessionPlans.size());
     autoPickTalents = sConfigMgr->GetOption<bool>("AiPlayerbot.AutoPickTalents", true);
     autoUpgradeEquip = sConfigMgr->GetOption<bool>("AiPlayerbot.AutoUpgradeEquip", true);

@@ -66,6 +66,7 @@ constexpr uint32 SPELL_TITAN_GRIP = 49152;
 constexpr uint32 SPELL_DK_FROST_PRESENCE = 48263;
 constexpr uint32 SPELL_GRAVITY_LAPSE_TK = 39432;
 constexpr uint32 SPELL_GRAVITY_LAPSE_MGT = 44226;
+constexpr uint32 VEHICLE_FLAG_FIXED_POSITION = 0x00200000;
 }
 
 std::vector<std::string> PlayerbotAI::dispel_whitelist = {
@@ -255,7 +256,7 @@ void PlayerbotAI::UpdateAI(uint32 elapsed, bool minimal)
         nextAICheckDelay = 0;
 
     if (bot && IsSelfBot(bot) && bot->GetSession() &&
-        !SelfbotManualSessionAllowed(bot->GetSession()->IsBot(), !bot->GetSession()->IsSocketClosed(),
+        !SelfbotManualSessionAllowed(bot->GetSession()->IsHeadless(), !bot->GetSession()->IsSocketClosed(),
                                     bot->GetSession()->IsLoggingOut()))
     {
         bot->InterruptNonMeleeSpells(false);
@@ -268,7 +269,18 @@ void PlayerbotAI::UpdateAI(uint32 elapsed, bool minimal)
     if (!bot || !bot->GetSession() || !bot->IsInWorld() || bot->IsBeingTeleported() ||
         bot->GetSession()->IsLoggingOut() || bot->IsDuringRemoveFromWorld())
         return;
-    // Bots send no movement opcodes, so m_lastFallZ stays frozen and Player::IsFalling() (a Z test`r`n    // against it) blocks LFG teleports. Unit::IsFalling() is the flag test, so real falls keep theirs.`r`n    if (!bot->Unit::IsFalling())`r`n        bot->SetFallInformation(0, bot->GetPositionZ());`r`n`r`n    UpdateCompanionErrands(this, elapsed);`r`n`r`n    if (UpdateSelfbotInventory(this, elapsed))`r`n        return;`r`n`r`n    UpdateSelfbotCycle(this, elapsed);`r`n
+    // Bots send no movement opcodes, so m_lastFallZ stays frozen and Player::IsFalling() (a Z test
+    // against it) blocks LFG teleports. Unit::IsFalling() is the flag test, so real falls keep theirs.
+    if (!bot->Unit::IsFalling())
+        bot->SetFallInformation(0, bot->GetPositionZ());
+
+    UpdateCompanionErrands(this, elapsed);
+
+    if (UpdateSelfbotInventory(this, elapsed))
+        return;
+
+    UpdateSelfbotCycle(this, elapsed);
+
     // Handle cheat options (set bot health and power if cheats are enabled)
     if (bot->IsAlive() &&
         (static_cast<uint32>(GetCheat()) > 0 || static_cast<uint32>(sPlayerbotAIConfig.botCheatMask) > 0))
@@ -1341,8 +1353,9 @@ void PlayerbotAI::HandleBotOutgoingPacket(WorldPacket const& packet)
             bot->GetMotionMaster()->Clear();
 
             // Unit* currentTarget = GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
-            bot->GetMotionMaster()->MoveKnockbackFromForPlayer(bot->GetPositionX() - vcos, bot->GetPositionY() - vsin,
-                                                               horizontalSpeed, verticalSpeed);
+            // Bots are client-controlled players, so opt past the guard that protects real clients.
+            bot->GetMotionMaster()->MoveKnockbackFrom(bot->GetPositionX() - vcos, bot->GetPositionY() - vsin,
+                                                      horizontalSpeed, verticalSpeed, true);
 
             // bot->AddUnitMovementFlag(MOVEMENTFLAG_FALLING);
             // bot->AddUnitMovementFlag(MOVEMENTFLAG_FORWARD);
@@ -2481,7 +2494,7 @@ bool PlayerbotAI::IsBotMainTank(Player* player)
         return false;
 
     WorldSession* session = player->GetSession();
-    if (!session || !session->IsBot())
+    if (!session || !session->IsHeadless())
         return false;
 
     if (!IsTank(player))
@@ -2511,7 +2524,7 @@ bool PlayerbotAI::IsBotMainTank(Player* player)
         if (memberAssistTankIndex == botAssistTankIndex && player == member)
             return true;
 
-        if (memberAssistTankIndex < botAssistTankIndex && member->GetSession()->IsBot())
+        if (memberAssistTankIndex < botAssistTankIndex && member->GetSession()->IsHeadless())
             return false;
     }
 

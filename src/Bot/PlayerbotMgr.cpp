@@ -35,8 +35,10 @@
 #include <cstdio>
 #include <cstring>
 #include <iomanip>
+#include <memory>
 #include <openssl/sha.h>
 #include <string>
+#include <vector>
 #include <unordered_set>
 
 class BotInitGuard
@@ -66,7 +68,7 @@ private:
 };
 
 std::unordered_set<ObjectGuid> BotInitGuard::botsBeingInitialized;
-std::unordered_map<ObjectGuid, uint32> PlayerbotHolder::botLoading;
+std::unordered_map<ObjectGuid, PendingBotLogin> PlayerbotHolder::botLoading;
 
 PlayerbotHolder::PlayerbotHolder() : PlayerbotAIBase(false) {}
 class PlayerbotLoginQueryHolder : public LoginQueryHolder
@@ -130,9 +132,9 @@ void PlayerbotHolder::AddPlayerBot(ObjectGuid playerGuid, uint32 masterAccountId
             return;
         }
         uint32 loadingForMaster = 0;
-        for (auto const& [guid, acctId] : botLoading)
+        for (auto const& [guid, pending] : botLoading)
         {
-            if (acctId == masterAccountId)
+            if (pending.masterAccountId == masterAccountId)
                 ++loadingForMaster;
         }
         uint32 count = mgr->GetPlayerbotsCount() + loadingForMaster;
@@ -158,12 +160,15 @@ void PlayerbotHolder::AddPlayerBot(ObjectGuid playerGuid, uint32 masterAccountId
         return;
     }
 
-    botLoading.emplace(playerGuid, masterAccountId);
+    WorldSession* botSession =
+        new WorldSession(accountId, "", 0x0, nullptr, SEC_PLAYER, EXPANSION_WRATH_OF_THE_LICH_KING, time_t(0),
+                         sWorld->GetDefaultDbcLocale(), 0, false, false, 0);
 
-    // Always login in with world session to avoid race condition
-    sWorld->AddQueryHolderCallback(CharacterDatabase.DelayQueryHolder(holder))
+    botLoading.emplace(playerGuid, PendingBotLogin{masterAccountId, botSession, false});
+
+    botSession->AddQueryHolderCallback(CharacterDatabase.DelayQueryHolder(holder))
         .AfterComplete(
-            [](SQLQueryHolderBase const& queryHolder)
+            [botSession](SQLQueryHolderBase const& queryHolder)
             {
                 PlayerbotLoginQueryHolder const& holder = static_cast<PlayerbotLoginQueryHolder const&>(queryHolder);
                 uint32 masterAccountId = holder.GetMasterAccountId();
@@ -176,23 +181,69 @@ void PlayerbotHolder::AddPlayerBot(ObjectGuid playerGuid, uint32 masterAccountId
 
                     if (masterPlayer)
                     {
-                        PlayerbotHolder* mgr = PlayerbotsMgr::instance().GetPlayerbotMgr(masterPlayer);
-
-                        if (mgr != nullptr)
+                        if (PlayerbotHolder* mgr = PlayerbotsMgr::instance().GetPlayerbotMgr(masterPlayer))
                         {
-                            mgr->HandlePlayerBotLoginCallback(holder);
-
+                            mgr->HandlePlayerBotLoginCallback(holder, botSession);
                             return;
                         }
 
-                        PlayerbotHolder::botLoading.erase(holder.GetGuid());
-
+                        // Master lost its manager while the holder was in flight
+                        AbandonPendingLogin(holder.GetGuid());
                         return;
                     }
                 }
 
-                RandomPlayerbotMgr ::instance().HandlePlayerBotLoginCallback(holder);
+                RandomPlayerbotMgr::instance().HandlePlayerBotLoginCallback(holder, botSession);
             });
+}
+
+void PlayerbotHolder::AbandonPendingLogin(ObjectGuid guid)
+{
+    auto itr = botLoading.find(guid);
+    if (itr != botLoading.end())
+        itr->second.failed = true;
+}
+
+void PlayerbotHolder::UpdatePendingLogins()
+{
+    if (botLoading.empty())
+        return;
+
+    // Callbacks erase or flag their own entry, so iterate over a snapshot of the keys
+    std::vector<ObjectGuid> guids;
+    guids.reserve(botLoading.size());
+    for (auto const& [guid, pending] : botLoading)
+        guids.push_back(guid);
+
+    for (ObjectGuid const& guid : guids)
+    {
+        auto itr = botLoading.find(guid);
+        if (itr == botLoading.end())
+            continue;
+
+        WorldSession* session = itr->second.session;
+        if (!itr->second.failed)
+            session->ProcessQueryCallbacks();  // may complete the login (entry erased) or flag it failed
+
+        itr = botLoading.find(guid);
+        if (itr == botLoading.end() || !itr->second.failed)
+            continue;
+
+        // Safe here: the processor has returned, nothing of the session is on the stack
+        session->LogoutPlayer(true);
+        delete session;
+        botLoading.erase(itr);
+    }
+}
+
+void PlayerbotHolder::ClearPendingLogins()
+{
+    for (auto const& [guid, pending] : botLoading)
+    {
+        pending.session->LogoutPlayer(true);
+        delete pending.session;
+    }
+    botLoading.clear();
 }
 
 bool PlayerbotHolder::IsAccountLinked(uint32 accountId, uint32 linkedAccountId)
@@ -203,14 +254,9 @@ bool PlayerbotHolder::IsAccountLinked(uint32 accountId, uint32 linkedAccountId)
     return PlayerbotsDatabase.Query(stmt) != nullptr;
 }
 
-void PlayerbotHolder::HandlePlayerBotLoginCallback(PlayerbotLoginQueryHolder const& holder)
+void PlayerbotHolder::HandlePlayerBotLoginCallback(PlayerbotLoginQueryHolder const& holder, WorldSession* botSession)
 {
     uint32 botAccountId = holder.GetAccountId();
-    // At login DBC locale should be what the server is set to use by default (as spells etc are hardcoded to ENUS this
-    // allows channels to work as intended)
-    WorldSession* botSession =
-        new WorldSession(botAccountId, "", 0x0, nullptr, SEC_PLAYER, EXPANSION_WRATH_OF_THE_LICH_KING, time_t(0),
-                         sWorld->GetDefaultDbcLocale(), 0, false, false, 0, true);
 
     botSession->HandlePlayerLoginFromDB(holder);  // will delete lqh
 
@@ -219,10 +265,8 @@ void PlayerbotHolder::HandlePlayerBotLoginCallback(PlayerbotLoginQueryHolder con
     {
         // Debug log
         LOG_DEBUG("mod-playerbots", "Bot player could not be loaded for account ID: {}", botAccountId);
-        botSession->LogoutPlayer(true);
-        delete botSession;
-        PlayerbotHolder::botLoading.erase(holder.GetGuid());
-
+        // This runs inside botSession's own callback processor, so the teardown is deferred to UpdatePendingLogins()
+        AbandonPendingLogin(holder.GetGuid());
         return;
     }
 
@@ -249,6 +293,8 @@ void PlayerbotHolder::UpdateSessions()
     for (PlayerBotMap::const_iterator itr = GetPlayerBotsBegin(); itr != GetPlayerBotsEnd(); ++itr)
     {
         Player* const bot = itr->second;
+        // Nothing else drives a headless session's async query, transaction and holder callbacks
+        bot->GetSession()->ProcessQueryCallbacks();
         if (bot->IsBeingTeleported())
         {
             PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
@@ -266,19 +312,16 @@ void PlayerbotHolder::UpdateSessions()
 
 void PlayerbotHolder::HandleBotPackets(WorldSession* session)
 {
-    WorldPacket* packet;
-    while (session->GetPacketQueue().next(packet))
+    while (std::unique_ptr<WorldPacket> packet = session->NextQueuedPacket())
     {
         OpcodeClient opcode = static_cast<OpcodeClient>(packet->GetOpcode());
         ClientOpcodeHandler const* opHandle = opcodeTable[opcode];
         if (!opHandle)
         {
             LOG_ERROR("playerbots", "Unhandled opcode {} queued for bot session {}. Packet dropped.", static_cast<uint32>(opcode), session->GetAccountId());
-            delete packet;
             continue;
         }
         opHandle->Call(session, *packet);
-        delete packet;
     }
 }
 
@@ -658,7 +701,10 @@ void PlayerbotHolder::OnBotLogin(Player* const bot)
                     //Currently in magons TBC, if you switch zones, then you join "Trade - <zone>" and "GuildRecruitment - <zone>"
                     //which is a core bug, should be "Trade - City" and "GuildRecruitment - City" in both 1.12 and TBC
                     //but if you (actual player) logout in a city and log back in - you join "City" versions
-                    snprintf(new_channel_name_buf, 100, channel->pattern[locale], GET_PLAYERBOT_AI(bot)->GetLocalizedAreaName(GetAreaEntryByAreaID(3459)).c_str());
+                    constexpr uint32 AREA_ID_CITY = 3459;
+                    std::string const cityName =
+                        GET_PLAYERBOT_AI(bot)->GetLocalizedAreaName(sAreaTableStore.LookupEntry(AREA_ID_CITY));
+                    snprintf(new_channel_name_buf, 100, channel->pattern[locale], cityName.c_str());
                     new_channel = cMgr->GetJoinChannel(new_channel_name_buf, channel->ChannelID);
                     break;
                 }
@@ -1059,7 +1105,7 @@ std::vector<std::string> PlayerbotHolder::HandlePlayerbotCommand(char const* arg
     if (!strcmp(cmd, "self"))
     {
         auto* session = master->GetSession();
-        if (!SelfbotManualSessionAllowed(session->IsBot(), !session->IsSocketClosed(), session->IsLoggingOut()))
+        if (!SelfbotManualSessionAllowed(session->IsHeadless(), !session->IsSocketClosed(), session->IsLoggingOut()))
         {
             messages.push_back("Selfbot requires an active manual client connection");
             return messages;

@@ -2743,7 +2743,14 @@ AiPlayerbot.SummonAtInnkeepersEnabled = 1
 AiPlayerbot.EnableICCBuffs = 1
 # Optional companion errands, exact character names and two primary skill IDs.
 # Example: Elvidia:171:182 (Alchemy, Herbalism). Multiple profiles separated by ;.
-# Grouped companions train while their master rests in a town/inn, using their own gold.
+# Grouped companions use their own gold for errands throughout the master's town or village.
+# Configured profiles also learn Fishing, Cooking and First Aid when available and affordable.
+# They stop errands and resume following when the master leaves that settlement or enters combat.
 # Herbalism detours: 40 yards search, 60 yards leash, no combat, 30 seconds maximum.
 # A command from the master cancels errands for 60 seconds. Empty disables the feature.
 AiPlayerbot.CompanionErrands = ""
+
+# Town autonomy without assigning new professions: comma-separated exact character names.
+# Learns class spells and existing primary professions, sells unused grey items and repairs.
+# Uses the same settlement and return rules as CompanionErrands. Empty disables these profiles.
+AiPlayerbot.CompanionTownCharacters = ""
