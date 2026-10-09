@@ -89,6 +89,15 @@ AiPlayerbot.Enabled = 1
 # Default: 1 in this fork.
 AiPlayerbot.CompanionOnly = 1
 
+# Maximum manually summoned same-account companions; 1-4, no random population.
+AiPlayerbot.CompanionMaxCount = 1
+
+# Same-account companions may release without a command: 10 seconds after a wipe,
+# 20 seconds normally, 60 seconds with a nearby resurrection-capable class.
+# Wait during nearby group combat or a pending resurrection. BG/arena unchanged.
+# Return to the corpse uses the normal movement and resurrection rules.
+AiPlayerbot.CompanionAutoRelease = 0
+
 # Optional exact character GUID allowed as the companion.
 # 0 allows any character from the master's own account (still limited to one at a time).
 # Set a non-zero GUID to restrict manual companion login to that character only.
@@ -749,6 +758,17 @@ AiPlayerbot.RandomBotMaxLevel = 80
 # Sync max randombot level with max level of online players
 # Default: 0 (disabled)
 AiPlayerbot.SyncLevelWithPlayers = 0
+
+# Same-account grouped companions catch up to their human master's level every 10s
+# while both are alive, stationary and out of combat. No downgrade, gear reset,
+# profession grant or automatic spell training. XP cannot overtake the master.
+# Independent of SyncLevelWithPlayers, which controls random-bot population levels.
+AiPlayerbot.CompanionSyncLevel = 0
+
+# Protection warrior: survival and interrupts before routine damage/debuffs;
+# shield slam and revenge before filler; no emergency fear fallback.
+# Opt-in for this companion server; applies to Protection strategies when enabled.
+AiPlayerbot.CompanionTankPriorities = 0
 
 # Concentrate randombots teleporting into level-appropriate open-world zones that hold a real
 # (non-GM) player. Falls back to normal teleporting behaviour when no player's zone matches.
@@ -2754,3 +2774,7 @@ AiPlayerbot.CompanionErrands = ""
 # Learns class spells and existing primary professions, sells unused grey items and repairs.
 # Uses the same settlement and return rules as CompanionErrands. Empty disables these profiles.
 AiPlayerbot.CompanionTownCharacters = ""
+
+# Refine human-led companions: interrupts, emergency priorities, healing triage and crowd-control respect.
+# Disabled by default. Does not enable autonomous pulls or change random bots.
+AiPlayerbot.CompanionCombatRefinement = 0

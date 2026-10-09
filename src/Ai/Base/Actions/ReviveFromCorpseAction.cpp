@@ -306,6 +306,9 @@ bool SpiritHealerAction::Execute(Event /*event*/)
     GraveyardStruct const* ClosestGrave =
         GetGrave(dCount > 10 || deadTime > 15 * MINUTE || AI_VALUE(uint8, "durability") < 10);
 
+    if (!ClosestGrave)
+        return false;
+
     if (bot->GetDistance2d(ClosestGrave->x, ClosestGrave->y) < sPlayerbotAIConfig.sightDistance)
     {
         GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
@@ -329,11 +332,6 @@ bool SpiritHealerAction::Execute(Event /*event*/)
                 return true;
             }
         }
-    }
-
-    if (!ClosestGrave)
-    {
-        return false;
     }
 
     bool moved = false;

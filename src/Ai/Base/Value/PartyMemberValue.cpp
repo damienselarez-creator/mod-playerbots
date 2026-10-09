@@ -16,6 +16,9 @@ Unit* PartyMemberValue::FindPartyMember(std::vector<Player*>* party, FindPlayerP
 {
     for (Player* player : *party)
     {
+        if (!player || !player->IsInWorld() || player->GetMap() != bot->GetMap())
+            continue;
+
         if (predicate.Check(player) && Check(player))
             return player;
 
@@ -39,6 +42,8 @@ Unit* PartyMemberValue::FindPartyMember(FindPlayerPredicate& predicate, bool /*i
     {
         for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
+            if (!ref->GetSource())
+                continue;
             if (ref->getSubGroup() != bot->GetSubGroup())
             {
                 nearestGroupPlayers.push_back(ref->GetSource()->GetGUID());
@@ -107,6 +112,8 @@ bool PartyMemberValue::Check(Unit* player)
 {
     // return player && player != bot && player->GetMapId() == bot->GetMapId() && bot->IsWithinDistInMap(player,
     // sPlayerbotAIConfig.sightDistance, false);
+    if (!player || !player->IsInWorld() || player->GetMap() != bot->GetMap())
+        return false;
     bool isGM = player->ToPlayer() && player->ToPlayer()->IsGameMaster();
     return player && player->GetMapId() == bot->GetMapId() && !isGM &&
            bot->GetDistance(player) < sPlayerbotAIConfig.spellDistance * 2 &&
@@ -127,7 +134,7 @@ bool PartyMemberValue::IsTargetOfSpellCast(Player* target, SpellEntryPredicate& 
     for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
     {
         Player* player = gref->GetSource();
-        if (!player || player == bot)
+        if (!player || player == bot || !player->IsInWorld() || player->GetMap() != bot->GetMap())
             continue;
 
         if (player->IsNonMeleeSpellCast(true))

@@ -5,6 +5,7 @@
  */
 
 #include "PlayerbotFactory.h"
+#include "CompanionVocation.h"
 #include "PlayerbotsDatabase.h"
 #include "AccountMgr.h"
 #include "AiFactory.h"
@@ -1672,7 +1673,16 @@ uint32 PlayerbotFactory::InitTalentsTree(bool increment /*false*/, bool use_temp
     uint8 cls = bot->getClass();
     std::map<uint8, uint32> tabs = AiFactory::GetPlayerSpecTabs(bot);
     uint32 total_tabs = tabs[0] + tabs[1] + tabs[2];
-    if (increment && total_tabs != 0)
+    auto vocation = CompanionVocation::Get(bot);
+    if (vocation.managed)
+    {
+        // No resets: an agreed vocation spends only available points. Existing choices win.
+        if (vocation.tab < 0 || (total_tabs && int(AiFactory::GetPlayerSpecTab(bot)) != vocation.tab))
+            return AiFactory::GetPlayerSpecTab(bot);
+        specTab = uint32(vocation.tab);
+        reset = false;
+    }
+    else if (increment && total_tabs != 0)
     {
         /// @todo: match current talent with template
         specTab = AiFactory::GetPlayerSpecTab(bot);
@@ -1722,11 +1732,33 @@ uint32 PlayerbotFactory::InitTalentsTree(bool increment /*false*/, bool use_temp
     {
         bot->resetTalents(true);
     }
+    if (vocation.managed)
+    {
+        // Preserve the agreed role at low levels even when an endgame template lists off-tree talents first.
+        if (use_template)
+            InitTalentsByTemplate(specTab, true);
+        InitCompanionTalents(specTab, 51);
+        if (use_template && AiFactory::GetPlayerSpecTabs(bot)[specTab] >= 51 && bot->GetFreeTalentPoints())
+            InitTalentsByTemplate(specTab);
+        // If the role template is incomplete, never invent an unrelated secondary build.
+        if (bot->GetFreeTalentPoints())
+            InitCompanionTalents(specTab, 71);
+        if (bot->getClass() == CLASS_SHAMAN && bot->HasSpell(SPELL_SHAMAN_DUAL_WIELD))
+        {
+            bot->SetSkill(SKILL_DUAL_WIELD, 0, 1, 1);
+            bot->SetCanDualWield(true);
+        }
+        bot->SendTalentsInfoData(false);
+        return sPlayerbotAIConfig.randomClassSpecIndex[cls][specTab];
+    }
     // use template if can
     if (use_template)
     {
         InitTalentsByTemplate(specTab);
     }
+    // A missing template must not divert an agreed novice into another tree.
+    if (vocation.managed && bot->GetFreeTalentPoints())
+        InitTalents(specTab);
     // if LimitTalentsExpansion = 1 there may be unused talent points
     if (bot->GetFreeTalentPoints())
         InitTalents((specTab + 1) % 3);
@@ -3661,7 +3693,51 @@ void PlayerbotFactory::InitTalents(uint32 specNo)
     }
 }
 
-void PlayerbotFactory::InitTalentsByTemplate(uint32 specTab)
+void PlayerbotFactory::InitCompanionTalents(uint32 specNo, uint32 targetPoints)
+{
+    std::vector<TalentEntry const*> talents;
+    for (uint32 i = 0; i < sTalentStore.GetNumRows(); ++i)
+    {
+        auto const* talent = sTalentStore.LookupEntry(i);
+        auto const* tab = talent ? sTalentTabStore.LookupEntry(talent->TalentTab) : nullptr;
+        if (tab && tab->tabpage == specNo && (tab->ClassMask & bot->getClassMask()))
+            talents.push_back(talent);
+    }
+    std::sort(talents.begin(), talents.end(), [](auto const* left, auto const* right)
+    {
+        if (left->Row != right->Row)
+            return left->Row < right->Row;
+        if (left->Col != right->Col)
+            return left->Col < right->Col;
+        return left->TalentID < right->TalentID;
+    });
+    uint32 spent = AiFactory::GetPlayerSpecTabs(bot)[specNo];
+    while (bot->GetFreeTalentPoints() && spent < targetPoints)
+    {
+        bool progressed = false;
+        for (auto const* talent : talents)
+        {
+            uint32 nextRank = 0;
+            for (uint32 rank = 0; rank < MAX_TALENT_RANK; ++rank)
+                if (talent->RankID[rank] && bot->HasTalent(talent->RankID[rank], bot->GetActiveSpec()))
+                    nextRank = rank + 1;
+            if (nextRank >= MAX_TALENT_RANK || !talent->RankID[nextRank])
+                continue;
+            uint32 before = bot->GetFreeTalentPoints();
+            bot->LearnTalent(talent->TalentID, nextRank);
+            if (bot->GetFreeTalentPoints() < before)
+            {
+                spent += before - bot->GetFreeTalentPoints();
+                progressed = true;
+                break;
+            }
+        }
+        if (!progressed)
+            break;
+    }
+}
+
+void PlayerbotFactory::InitTalentsByTemplate(uint32 specTab, bool primaryOnly)
 {
     // if (sPlayerbotAIConfig.parsedSpecLinkOrder[bot->getClass()][specNo][80].size() == 0)
     // {
@@ -3701,6 +3777,8 @@ void PlayerbotFactory::InitTalentsByTemplate(uint32 specTab)
         for (std::vector<uint32>& p : sPlayerbotAIConfig.parsedSpecLinkOrder[cls][specIndex][level])
         {
             uint32 tab = p[0], row = p[1], col = p[2], lvl = p[3];
+            if (primaryOnly && tab != specTab)
+                continue;
             if (sPlayerbotAIConfig.limitTalentsExpansion && bot->GetLevel() <= 60 && (row > 6 || (row == 6 && col != 1)))
                 continue;
 

@@ -5,6 +5,7 @@
  */
 
 #include "PartyMemberToHeal.h"
+#include "CompanionErrands.h"
 #include "Playerbots.h"
 #include "ServerFacade.h"
 
@@ -35,6 +36,7 @@ Unit* PartyMemberToHeal::Calculate()
     if (!group)
         return bot;
 
+    bool const refined = sPlayerbotAIConfig.companionCombatRefinement && IsCompanionInventoryManaged(botAI);
     bool isRaid = bot->GetGroup()->isRaidGroup();
     MinValueCalculator calc(100);
 
@@ -71,7 +73,7 @@ Unit* PartyMemberToHeal::Calculate()
     for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
     {
         Player* player = gref->GetSource();
-        if (player->IsGameMaster())
+        if (!player || !player->IsInWorld() || player->GetMap() != bot->GetMap() || player->IsGameMaster())
             continue;
         if (player && player->IsAlive())
         {
@@ -86,6 +88,14 @@ Unit* PartyMemberToHeal::Calculate()
                 else
                 {
                     probeValue = health + player->GetDistance2d(bot) / 10.0f;
+                }
+                if (refined)
+                {
+                    // Favor endangered tanks and avoid redundant noncritical heals.
+                    if (botAI->IsTank(player) && player->IsInCombat() && health < 80.0f)
+                        probeValue -= 8.0f;
+                    if (health >= sPlayerbotAIConfig.lowHealth && IsTargetOfSpellCast(player, predicate))
+                        probeValue += 20.0f;
                 }
                 // delay Check player to here for better performance
                 if (probeValue < calc.minValue && Check(player))
@@ -163,44 +173,34 @@ Unit* HealerLowMana::Calculate()
 
 Unit* PartyMemberToProtect::Calculate()
 {
-    return nullptr;
-    Group* group = bot->GetGroup();
-    if (!group)
+    if (!(sPlayerbotAIConfig.companionCombatRefinement && IsCompanionInventoryManaged(botAI)) || !bot->GetGroup())
         return nullptr;
 
-    std::vector<Unit*> needProtect;
-
-    GuidVector attackers = botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get();
-    for (GuidVector::iterator i = attackers.begin(); i != attackers.end(); ++i)
+    Unit* result = nullptr;
+    float best = 100.0f;
+    GuidVector const attackers = AI_VALUE(GuidVector, "attackers");
+    for (ObjectGuid const guid : attackers)
     {
-        Unit* unit = botAI->GetUnit(*i);
-        if (!unit)
+        Unit* enemy = botAI->GetUnit(guid);
+        if (!enemy || !enemy->IsAlive() || enemy->GetMap() != bot->GetMap())
             continue;
-
-        Unit* pVictim = unit->GetVictim();
-        if (!pVictim || !pVictim->IsPlayer())
+        Unit* victim = enemy->GetVictim();
+        Player* player = victim ? victim->ToPlayer() : nullptr;
+        // Physical immunity would stop a tank from holding the encounter.
+        if (!player || player == bot || !player->IsAlive() || !player->IsInWorld() ||
+            !player->IsInSameGroupWith(bot) || botAI->IsTank(player) || !Check(player) ||
+            !enemy->IsWithinMeleeRange(player))
             continue;
-
-        if (pVictim == bot)
+        float health = player->GetHealthPct();
+        bool const healer = botAI->IsHeal(player);
+        if (health >= (healer ? 45.0f : 25.0f))
             continue;
-
-        float attackDistance = 30.0f;
-        if (ServerFacade::instance().GetDistance2d(pVictim, unit) > attackDistance)
-            continue;
-
-        if (botAI->IsTank((Player*)pVictim) && pVictim->GetHealthPct() > 10)
-            continue;
-        else if (pVictim->GetHealthPct() > 30)
-            continue;
-
-        if (find(needProtect.begin(), needProtect.end(), pVictim) == needProtect.end())
-            needProtect.push_back(pVictim);
+        float const score = health - (healer ? 10.0f : 0.0f);
+        if (score < best)
+        {
+            best = score;
+            result = player;
+        }
     }
-
-    if (needProtect.empty())
-        return nullptr;
-
-    sort(needProtect.begin(), needProtect.end(), compareByHealth);
-
-    return needProtect[0];
+    return result;
 }

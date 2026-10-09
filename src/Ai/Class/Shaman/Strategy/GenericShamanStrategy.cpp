@@ -7,6 +7,7 @@
 #include "GenericShamanStrategy.h"
 #include "AiFactory.h"
 #include "Playerbots.h"
+#include "CompanionErrands.h"
 #include "Strategy.h"
 
 class GenericShamanStrategyActionNodeFactory : public NamedObjectFactory<ActionNode>
@@ -113,10 +114,15 @@ GenericShamanStrategy::GenericShamanStrategy(PlayerbotAI* botAI) : CombatStrateg
 
 void GenericShamanStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
+    bool const refined = sPlayerbotAIConfig.companionCombatRefinement && IsCompanionInventoryManaged(botAI);
     CombatStrategy::InitTriggers(triggers);
 
-    triggers.push_back(new TriggerNode("wind shear", { NextAction("wind shear", 23.0f), }));
-    triggers.push_back(new TriggerNode("wind shear on enemy healer", { NextAction("wind shear on enemy healer", 23.0f), }));
+    triggers.push_back(new TriggerNode("wind shear",
+            { NextAction("wind shear",
+                refined ? ACTION_INTERRUPT + 2 : 23.0f), }));
+    triggers.push_back(new TriggerNode("wind shear on enemy healer",
+            { NextAction("wind shear on enemy healer",
+                refined ? ACTION_INTERRUPT + 1 : 23.0f), }));
     triggers.push_back(new TriggerNode("purge", { NextAction("purge", ACTION_DISPEL), }));
     triggers.push_back(new TriggerNode("new pet", { NextAction("set pet stance", 65.0f), }));
 }

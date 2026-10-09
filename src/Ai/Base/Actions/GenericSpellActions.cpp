@@ -5,6 +5,7 @@
  */
 
 #include "GenericSpellActions.h"
+#include "CompanionErrands.h"
 #include "Chat.h"
 #include "Event.h"
 #include "GenericBuffUtils.h"
@@ -175,6 +176,15 @@ bool CastSpellAction::Execute(Event /*event*/)
         }
 
         return botAI->CastSpell(castId, bot);
+    }
+
+    // Cached triggers can outlive the cast another companion has already interrupted.
+    if (sPlayerbotAIConfig.companionCombatRefinement && IsCompanionInventoryManaged(botAI))
+    {
+        auto const* info = sSpellMgr->GetSpellInfo(AI_VALUE2(uint32, "spell id", spell));
+        if (info && info->HasEffect(SPELL_EFFECT_INTERRUPT_CAST) &&
+            !botAI->IsInterruptableSpellCasting(GetTarget(), spell))
+            return false;
     }
 
     return botAI->CastSpell(spell, GetTarget());

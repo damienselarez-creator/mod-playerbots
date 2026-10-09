@@ -7,6 +7,7 @@
 #include "GenericDKStrategy.h"
 #include "DKAiObjectContext.h"
 #include "Playerbots.h"
+#include "CompanionErrands.h"
 
 class GenericDKStrategyActionNodeFactory : public NamedObjectFactory<ActionNode>
 {
@@ -51,22 +52,31 @@ GenericDKStrategy::GenericDKStrategy(PlayerbotAI* botAI) : MeleeCombatStrategy(b
 
 void GenericDKStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
+    bool const refined = sPlayerbotAIConfig.companionCombatRefinement && IsCompanionInventoryManaged(botAI);
     MeleeCombatStrategy::InitTriggers(triggers);
 
     triggers.push_back(
-        new TriggerNode("mind freeze", { NextAction("mind freeze", ACTION_HIGH + 1) }));
+        new TriggerNode("mind freeze",
+            { NextAction("mind freeze",
+                refined ? ACTION_INTERRUPT + 2 : ACTION_HIGH + 1) }));
     triggers.push_back(
         new TriggerNode("mind freeze on enemy healer",
-                        { NextAction("mind freeze on enemy healer", ACTION_HIGH + 1) }));
+                        { NextAction("mind freeze on enemy healer",
+                refined ? ACTION_INTERRUPT + 1 : ACTION_HIGH + 1) }));
     triggers.push_back(new TriggerNode(
         "horn of winter", { NextAction("horn of winter", ACTION_NORMAL + 1) }));
     triggers.push_back(new TriggerNode("critical health",
-                                       { NextAction("raise dead", ACTION_HIGH + 6),
-                                         NextAction("death pact", ACTION_HIGH + 5) }));
+                                       { NextAction("raise dead",
+                refined ? ACTION_EMERGENCY + 2 : ACTION_HIGH + 6),
+                                         NextAction("death pact",
+                refined ? ACTION_EMERGENCY + 3 : ACTION_HIGH + 5) }));
 
     triggers.push_back(
-        new TriggerNode("low health", { NextAction("icebound fortitude", ACTION_HIGH + 5),
-                                                        NextAction("rune tap", ACTION_HIGH + 4) }));
+        new TriggerNode("low health",
+            { NextAction("icebound fortitude",
+                refined ? ACTION_EMERGENCY + 1 : ACTION_HIGH + 5),
+                                                        NextAction("rune tap",
+                refined ? ACTION_EMERGENCY : ACTION_HIGH + 4) }));
     triggers.push_back(
         new TriggerNode("medium aoe", { NextAction("death and decay", ACTION_HIGH + 9),
                                                         NextAction("pestilence", ACTION_NORMAL + 4),

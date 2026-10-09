@@ -10,6 +10,8 @@
 #include "Action.h"
 #include "ReviveFromCorpseAction.h"
 
+#include <chrono>
+
 class PlayerbotAI;
 
 class ReleaseSpiritAction : public Action
@@ -33,8 +35,12 @@ public:
 
     bool Execute(Event event) override;
     bool isUseful() override;
+    void ResetRecoveryTimer() { _deathStarted = std::chrono::steady_clock::now(); }
+    static bool IsAutonomousCompanion(PlayerbotAI* ai);
 
 private:
+    bool ShouldReleaseCompanion() const;
+    std::chrono::steady_clock::time_point _deathStarted = std::chrono::steady_clock::now();
     bool HandleBattlegroundSpiritHealer();
     bool ShouldAutoRelease() const;
     bool ShouldDelayBattlegroundRelease() const;

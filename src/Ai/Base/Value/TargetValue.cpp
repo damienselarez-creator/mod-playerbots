@@ -5,6 +5,7 @@
  */
 
 #include "TargetValue.h"
+#include "CompanionErrands.h"
 #include "CombatManager.h"
 #include "LastMovementValue.h"
 #include "ObjectGuid.h"
@@ -55,6 +56,10 @@ Unit* TargetValue::FindTarget(FindTargetStrategy* strategy)
 
 bool FindNonCcTargetStrategy::IsCcTarget(Unit* attacker)
 {
+    if (attacker && sPlayerbotAIConfig.companionCombatRefinement && IsCompanionInventoryManaged(botAI) &&
+        attacker->HasBreakableByDamageCrowdControlAura())
+        return true;
+
     if (Group* group = botAI->GetBot()->GetGroup())
     {
         Group::MemberSlotList const& groupSlot = group->GetMemberSlots();

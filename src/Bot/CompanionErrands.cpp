@@ -1,4 +1,5 @@
 #include "CompanionErrands.h"
+#include "CompanionVocation.h"
 
 #include "Bag.h"
 #include "CellImpl.h"
@@ -19,10 +20,29 @@
 #include <cmath>
 #include <limits>
 #include <set>
+#include <mutex>
+#include <map>
+#include <chrono>
 
 namespace
 {
-    enum Timer : uint32 { Decision = 1, TownScan, HerbScan, Deadline, Progress, Resume, ClearRejected };
+    std::mutex narrativeFocusMutex;
+    std::map<ObjectGuid, std::string> narrativeFocus;
+
+    using TrainingClock = std::chrono::steady_clock;
+    std::mutex trainingMutex;
+    std::map<ObjectGuid, std::pair<TrainingClock::time_point, CompanionTrainingSnapshot>> trainingSnapshots;
+
+    void RecordTraining(Player* bot, std::string const& status, uint32 trainer, uint32 spell, uint32 learned)
+    {
+        std::lock_guard<std::mutex> lock(trainingMutex);
+        if (trainingSnapshots.size() >= 4096 && !trainingSnapshots.count(bot->GetGUID()))
+            trainingSnapshots.erase(trainingSnapshots.begin());
+        trainingSnapshots[bot->GetGUID()] = {TrainingClock::now(),
+            {status, trainer, spell, learned, bot->GetMoney(), 0}};
+    }
+
+    enum Timer : uint32 { Decision = 1, TownScan, HerbScan, Deadline, Progress, Resume, ClearRejected, VerifyLesson };
     enum class Errand { None, Trainer, Herb, Return, PoisonVendor, Bags };
     constexpr float TownRadius = 1500.0f;
 
@@ -329,6 +349,10 @@ struct CompanionErrandState
     uint32 settlement = 0;
     uint32 reserve = 0;
     uint32 learned = 0;
+    uint32 pendingLesson = 0;
+    uint32 pendingTrainer = 0;
+    uint32 moneyBeforeLesson = 0;
+    bool verificationDue = false;
     ObjectGuid target;
     ObjectGuid owner;
     float x = 0, y = 0, z = 0;
@@ -339,9 +363,27 @@ struct CompanionErrandState
     std::set<ObjectGuid> failedSales;
     std::set<uint32> rejectedBagVendors;
     std::set<uint32> rejectedTrainers;
+    std::set<uint32> rejectedLessons;
     std::set<uint32> rejectedVendors;
     std::set<ObjectGuid> rejectedHerbs;
 };
+
+CompanionTrainingSnapshot GetCompanionTrainingSnapshot(ObjectGuid guid)
+{
+    std::lock_guard<std::mutex> lock(trainingMutex);
+    auto it = trainingSnapshots.find(guid);
+    if (it == trainingSnapshots.end())
+        return {};
+    auto age = std::chrono::duration_cast<std::chrono::seconds>(TrainingClock::now() - it->second.first).count();
+    if (age > 600)
+    {
+        trainingSnapshots.erase(it);
+        return {};
+    }
+    auto result = it->second.second;
+    result.ageSeconds = uint32(age);
+    return result;
+}
 
 bool IsCompanionInventoryManaged(PlayerbotAI* ai)
 {
@@ -361,7 +403,8 @@ bool CanSellCompanionItem(PlayerbotAI* ai, Item* item)
 bool IsManagedCompanion(PlayerbotAI* ai)
 {
     return ai && ai->GetBot() && ai->GetMaster() && ai->GetMaster() != ai->GetBot() &&
-        !IsSelfBot(ai->GetBot()) && sPlayerbotAIConfig.companionProfessionPlans.count(ai->GetBot()->GetName());
+        !IsSelfBot(ai->GetBot()) && (sPlayerbotAIConfig.companionProfessionPlans.count(ai->GetBot()->GetName()) ||
+        CompanionVocation::Get(ai->GetBot()).professions[0] != 0);
 }
 
 namespace
@@ -371,10 +414,14 @@ namespace
         auto& state = *ai->companionErrands;
         if (reject)
         {
-            LOG_INFO("playerbots", "[CompanionErrands] {} abandons unreachable/unsafe errand {}",
-                ai->GetBot()->GetName(), uint32(state.kind));
+            LOG_INFO("playerbots.companion", "[Training] {} abandons errand={} spawn={} distance={} learned={}",
+                ai->GetBot()->GetName(), uint32(state.kind), state.spawn,
+                ai->GetBot()->GetDistance(state.x, state.y, state.z), state.learned);
             if (state.kind == Errand::Trainer)
+            {
                 state.rejectedTrainers.insert(state.spawn);
+                RecordTraining(ai->GetBot(), "interrupted_or_unreachable", 0, state.pendingLesson, state.learned);
+            }
             if (state.kind == Errand::Bags)
                 state.rejectedBagVendors.insert(state.spawn);
             if (state.kind == Errand::PoisonVendor)
@@ -398,10 +445,38 @@ namespace
             bot->GetMotionMaster()->Clear();
         }
         state.kind = Errand::None;
+        state.pendingLesson = 0;
+        state.verificationDue = false;
+        state.events.CancelEvent(VerifyLesson);
         state.target.Clear();
         state.gathering = false;
         state.events.CancelEvent(Deadline);
         state.events.CancelEvent(Progress);
+    }
+
+    bool HasLearnedLesson(Player* bot, uint32 id)
+    {
+        if (bot->HasSpell(id))
+            return true;
+        auto const* info = sSpellMgr->GetSpellInfo(id);
+        if (!info)
+            return false;
+        bool teachesSpell = false;
+        for (auto const& effect : info->GetEffects())
+        {
+            if (!effect.IsEffect(SPELL_EFFECT_LEARN_SPELL))
+                continue;
+            teachesSpell = true;
+            if (!bot->HasSpell(effect.TriggerSpell))
+                return false;
+        }
+        return teachesSpell;
+    }
+
+    bool CanVisitTrainer(PlayerbotAI* ai)
+    {
+        // Class lessons and existing professions do not require a PBC vocation.
+        return IsCompanionInventoryManaged(ai) && sPlayerbotAIConfig.allowLearnTrainerSpells;
     }
 
     void Returning(PlayerbotAI* ai)
@@ -409,7 +484,7 @@ namespace
         auto& state = *ai->companionErrands;
         StopTrip(ai, false);
         // Continue local errands while the master remains in the same settlement.
-        if (IsManagedCompanion(ai) && Eligible(ai) && state.settlement &&
+        if ((IsManagedCompanion(ai) || CanVisitTrainer(ai)) && Eligible(ai) && state.settlement &&
             Settlement(ai->GetMaster()) == state.settlement)
         {
             state.townDue = true;
@@ -421,29 +496,38 @@ namespace
         state.events.RescheduleEvent(Progress, Milliseconds(30000));
     }
 
-    Trainer::Spell const* ChooseLesson(PlayerbotAI* ai, Trainer::Trainer* trainer, float discount)
+    Trainer::Spell const* ChooseLesson(PlayerbotAI* ai, Trainer::Trainer* trainer, float discount, bool budget = true)
     {
         Player* bot = ai->GetBot();
-        if (!IsManagedCompanion(ai) || !trainer || !trainer->IsTrainerValidForPlayer(bot))
+        if (!CanVisitTrainer(ai) || !trainer || !trainer->IsTrainerValidForPlayer(bot))
             return nullptr;
         bool const classTrainer = trainer->GetTrainerType() == Trainer::Type::Class;
+        auto const focus = GetCompanionNarrativeFocus(bot->GetGUID());
+        if ((focus == "training_class" && !classTrainer) || (focus == "training_professions" && classTrainer))
+            return nullptr;
         if (!classTrainer && trainer->GetTrainerType() != Trainer::Type::Tradeskill)
             return nullptr;
-        auto const& skills = sPlayerbotAIConfig.companionProfessionPlans.at(bot->GetName());
+        auto skills = CompanionVocation::Get(bot).professions;
+        if (!skills[0])
+            if (auto plan = sPlayerbotAIConfig.companionProfessionPlans.find(bot->GetName());
+                plan != sPlayerbotAIConfig.companionProfessionPlans.end())
+                skills = plan->second;
         Trainer::Spell const* best = nullptr;
         for (auto const& spell : trainer->GetSpells())
         {
+            if (ai->companionErrands->rejectedLessons.count(spell.SpellId))
+                continue;
             if (!classTrainer)
             {
                 uint32 skill = IsProfession(spell.ReqSkillLine) ? spell.ReqSkillLine :
                     ProfessionForSpell(spell.SpellId);
                 if (!skill || (!bot->HasSkill(skill) && skill != skills[0] && skill != skills[1] &&
-                    !IsSecondaryProfession(skill)))
+                    !(IsManagedCompanion(ai) && IsSecondaryProfession(skill))))
                     continue;
             }
             uint32 cost = uint32(std::floor(spell.MoneyCost * discount));
             if (trainer->CanTeachSpell(bot, &spell) &&
-                CompanionErrands::CanSpend(bot->GetMoney(), cost, ai->companionErrands->reserve) &&
+                (!budget || CompanionErrands::CanSpend(bot->GetMoney(), cost, ai->companionErrands->reserve)) &&
                 (!best || spell.MoneyCost < best->MoneyCost ||
                     (spell.MoneyCost == best->MoneyCost && spell.SpellId < best->SpellId)))
                 best = trainer->GetSpell(spell.SpellId);
@@ -452,14 +536,55 @@ namespace
     }
 }
 
+void SetCompanionNarrativeFocus(ObjectGuid guid, std::string const& focus)
+{
+    std::lock_guard<std::mutex> lock(narrativeFocusMutex);
+    if (focus == "normal")
+        narrativeFocus.erase(guid);
+    else if (focus == "follow" || focus == "training" || focus == "training_class" ||
+        focus == "training_professions" || focus == "craft")
+        narrativeFocus[guid] = focus;
+}
+
+std::string GetCompanionNarrativeFocus(ObjectGuid guid)
+{
+    std::lock_guard<std::mutex> lock(narrativeFocusMutex);
+    auto found = narrativeFocus.find(guid);
+    return found == narrativeFocus.end() ? "normal" : found->second;
+}
+
 void CancelCompanionErrands(PlayerbotAI* ai)
 {
     if (!ai->companionErrands)
         return;
+    if (ai->companionErrands->kind == Errand::Trainer)
+        RecordTraining(ai->GetBot(), "interrupted", 0, 0, ai->companionErrands->learned);
     StopTrip(ai, false);
     auto& state = *ai->companionErrands;
     state.paused = true;
     state.events.RescheduleEvent(Resume, Milliseconds(60000));
+}
+
+void RequestCompanionTraining(PlayerbotAI* ai)
+{
+    if (!IsCompanionInventoryManaged(ai))
+        return;
+    // Schedule a fresh decision; normal safety and purchasing checks remain authoritative.
+    if (!ai->companionErrands)
+    {
+        ai->companionErrands = std::make_shared<CompanionErrandState>();
+        ai->companionErrands->reserve = ai->GetBot()->GetMoney() / 5;
+        ai->companionErrands->events.ScheduleEvent(ClearRejected, Milliseconds(300000));
+    }
+    auto& state = *ai->companionErrands;
+    if (state.pendingLesson)
+        return;
+    StopTrip(ai, false);
+    state.paused = false;
+    state.townDue = true;
+    state.ready = true;
+    state.events.CancelEvent(Resume);
+    RecordTraining(ai->GetBot(), "requested", 0, 0, 0);
 }
 
 void UpdateCompanionErrands(PlayerbotAI* ai, uint32 elapsed)
@@ -476,11 +601,13 @@ void UpdateCompanionErrands(PlayerbotAI* ai, uint32 elapsed)
             case TownScan: state.townDue = true; break;
             case HerbScan: state.herbDue = true; break;
             case Resume: state.paused = false; break;
+            case VerifyLesson: state.verificationDue = true; break;
             case ClearRejected:
                 state.rejectedBagVendors.clear();
                 state.failedSales.clear();
                 state.warnedBags = false;
                 state.rejectedTrainers.clear();
+                state.rejectedLessons.clear();
                 state.rejectedVendors.clear();
                 state.rejectedHerbs.clear();
                 state.events.ScheduleEvent(ClearRejected, Milliseconds(300000));
@@ -497,7 +624,8 @@ void UpdateCompanionErrands(PlayerbotAI* ai, uint32 elapsed)
         return;
     Player* master = ai->GetMaster();
     Player* bot = ai->GetBot();
-    if (!Eligible(ai) || master->GetGUID() != state.owner || bot->GetMapId() != state.map ||
+    if (GetCompanionNarrativeFocus(bot->GetGUID()) == "follow" ||
+        !Eligible(ai) || master->GetGUID() != state.owner || bot->GetMapId() != state.map ||
         ((state.kind == Errand::Trainer || state.kind == Errand::PoisonVendor || state.kind == Errand::Bags) &&
             (!InTown(master) || master->GetZoneId() != state.zone ||
             (state.settlement ? Settlement(master) != state.settlement :
@@ -525,7 +653,7 @@ void FinishCompanionGather(PlayerbotAI* ai, ObjectGuid guid)
 
 bool CompanionErrandAction::isUseful()
 {
-    if (!Eligible(botAI))
+    if (!Eligible(botAI) || GetCompanionNarrativeFocus(bot->GetGUID()) == "follow")
         return false;
     if (!botAI->companionErrands)
     {
@@ -558,7 +686,7 @@ bool CompanionErrandAction::Execute(Event)
         {
             state.townDue = false;
             state.events.RescheduleEvent(TownScan, Milliseconds(60000));
-            if (InTown(master) && (IsManagedCompanion(botAI) ||
+            if (InTown(master) && (IsManagedCompanion(botAI) || CanVisitTrainer(botAI) ||
                 (!master->isMoving() && bot->GetDistance(master) < 30.0f)))
             {
                 state.reserve = std::max(state.reserve, bot->GetMoney() / 5);
@@ -575,6 +703,7 @@ bool CompanionErrandAction::Execute(Event)
                         "votre aide est necessaire.");
                     state.warnedBags = true;
                 }
+                bool budgetBlocked = false;
                 Errand selected = Errand::None;
                 for (auto const& [spawn, data] : sObjectMgr->GetAllCreatureData())
                 {
@@ -607,7 +736,9 @@ bool CompanionErrandAction::Execute(Event)
                     else if (!state.rejectedTrainers.count(uint32(spawn)) && ChooseLesson(botAI, trainer, 1.0f))
                     {
                         candidate = Errand::Trainer;
-                        priority = trainer->GetTrainerType() == Trainer::Type::Class ? 0.0 : 10000.0;
+                        auto focus = GetCompanionNarrativeFocus(bot->GetGUID());
+                        bool profession = trainer->GetTrainerType() != Trainer::Type::Class;
+                        priority = focus == "craft" ? (profession ? 0.0 : 10000.0) : (profession ? 10000.0 : 0.0);
                     }
                     else if (IsManagedCompanion(botAI) && !state.rejectedVendors.count(uint32(spawn)) &&
                         ChoosePoison(bot, sObjectMgr->GetNpcVendorItemList(data.id), state.reserve, stock).item)
@@ -616,7 +747,10 @@ bool CompanionErrandAction::Execute(Event)
                         priority = 20000.0;
                     }
                     if (candidate == Errand::None)
+                    {
+                        budgetBlocked = budgetBlocked || ChooseLesson(botAI, trainer, 1.0f, false);
                         continue;
+                    }
                     double score = bot->GetDistance(data.posX, data.posY, data.posZ) + priority;
                     if (score >= best)
                         continue;
@@ -627,10 +761,20 @@ bool CompanionErrandAction::Execute(Event)
                     state.y = data.posY;
                     state.z = data.posZ;
                 }
+                if (best == std::numeric_limits<double>::max() &&
+                    GetCompanionNarrativeFocus(bot->GetGUID()).starts_with("training"))
+                {
+                    auto const previous = GetCompanionTrainingSnapshot(bot->GetGUID());
+                    if (previous.status.empty() || previous.status == "requested" ||
+                        previous.status == "no_eligible_lesson" || previous.status == "budget_insufficient")
+                        RecordTraining(bot, budgetBlocked ? "budget_insufficient" : "no_eligible_lesson", 0, 0, 0);
+                }
                 if (best != std::numeric_limits<double>::max())
                 {
                     state.kind = selected;
                     state.learned = 0;
+                    if (selected == Errand::Trainer)
+                        RecordTraining(bot, "travelling", 0, 0, 0);
                     state.sold = 0;
                     state.repairs = 0;
                     botAI->TellMaster(selected == Errand::Bags ?
@@ -645,7 +789,8 @@ bool CompanionErrandAction::Execute(Event)
         {
             state.herbDue = false;
             state.events.RescheduleEvent(HerbScan, Milliseconds(5000));
-            if (IsManagedCompanion(botAI) && bot->HasSkill(SKILL_HERBALISM) && bot->HasSpell(2366) && HasBagRoom(bot) &&
+            if (!GetCompanionNarrativeFocus(bot->GetGUID()).starts_with("training") &&
+                IsManagedCompanion(botAI) && bot->HasSkill(SKILL_HERBALISM) && bot->HasSpell(2366) && HasBagRoom(bot) &&
                 bot->GetDistance(master) <= 40.0f && !master->IsMounted() && !bot->IsMounted())
             {
                 float best = 40.0f;
@@ -814,6 +959,31 @@ bool CompanionErrandAction::Execute(Event)
     }
     if (state.kind == Errand::Trainer)
     {
+        // Triggered learning spells may finish after TeachSpell returns. Verify before any new purchase.
+        if (state.pendingLesson)
+        {
+            bool learned = HasLearnedLesson(bot, state.pendingLesson);
+            if (!learned && !state.verificationDue)
+                return true;
+            LOG_INFO("playerbots.companion", "[Training] {} trainer={} spell={} known={} moneyBefore={} moneyAfter={}",
+                bot->GetName(), state.pendingTrainer, state.pendingLesson, learned,
+                state.moneyBeforeLesson, bot->GetMoney());
+            if (learned)
+            {
+                ++state.learned;
+                if (auto const* info = sSpellMgr->GetSpellInfo(state.pendingLesson))
+                    botAI->TellMaster("J'ai appris " + ChatHelper::FormatSpell(info));
+            }
+            else
+                state.rejectedLessons.insert(state.pendingLesson);
+            RecordTraining(bot, learned ? "learned" : "learning_failed", state.pendingTrainer,
+                state.pendingLesson, state.learned);
+            state.pendingLesson = 0;
+            state.verificationDue = false;
+            state.events.CancelEvent(VerifyLesson);
+            state.events.RescheduleEvent(Progress, Milliseconds(30000));
+            return true;
+        }
         Creature* npc = ObjectAccessor::GetSpawnedCreatureByDBGUID(bot->GetMapId(), state.spawn);
         if (npc && bot->GetNPCIfCanInteractWith(npc->GetGUID(), UNIT_NPC_FLAG_TRAINER))
         {
@@ -821,20 +991,24 @@ bool CompanionErrandAction::Execute(Event)
             auto const* lesson = ChooseLesson(botAI, trainer, bot->GetReputationPriceDiscount(npc));
             if (lesson)
             {
-                uint32 id = lesson->SpellId;
+                state.pendingLesson = lesson->SpellId;
+                state.pendingTrainer = npc->GetEntry();
+                state.moneyBeforeLesson = bot->GetMoney();
+                state.verificationDue = false;
+                state.events.RescheduleEvent(VerifyLesson, Milliseconds(3000));
+                state.events.RescheduleEvent(Progress, Milliseconds(30000));
                 bot->StopMoving();
-                trainer->TeachSpell(npc, bot, id);
-                if (!trainer->CanTeachSpell(bot, trainer->GetSpell(id)))
-                {
-                    ++state.learned;
-                    if (auto const* info = sSpellMgr->GetSpellInfo(id))
-                        botAI->TellMaster("J'ai appris " + ChatHelper::FormatSpell(info));
-                    LOG_INFO("playerbots", "[CompanionErrands] {} learned {} at {}", bot->GetName(), id,
-                        npc->GetEntry());
-                    return true;
-                }
-                state.rejectedTrainers.insert(state.spawn);
+                trainer->TeachSpell(npc, bot, state.pendingLesson);
+                RecordTraining(bot, "verifying", npc->GetEntry(), state.pendingLesson, state.learned);
+                return true;
             }
+            bool budgetBlocked = ChooseLesson(botAI, trainer, bot->GetReputationPriceDiscount(npc), false);
+            auto const lastTraining = GetCompanionTrainingSnapshot(bot->GetGUID());
+            bool const failed = lastTraining.status == "learning_failed";
+            RecordTraining(bot, budgetBlocked ? "budget_insufficient" : failed ? "learning_failed" : "visit_finished",
+                npc->GetEntry(), 0, state.learned);
+            LOG_INFO("playerbots.companion", "[Training] {} finished trainer={} learned={} money={} reserve={} budget={}",
+                bot->GetName(), npc->GetEntry(), state.learned, bot->GetMoney(), state.reserve, budgetBlocked);
             botAI->TellMaster("Visite terminee, je vous rejoins.");
             state.events.RescheduleEvent(TownScan, Milliseconds(5000));
             Returning(botAI);

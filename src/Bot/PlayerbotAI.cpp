@@ -37,6 +37,7 @@
 #include "PerfMonitor.h"
 #include "Player.h"
 #include "PlayerbotAIConfig.h"
+#include "ReleaseSpiritAction.h"
 #include "PlayerbotGuildMgr.h"
 #include "PlayerbotMgr.h"
 #include "PlayerbotTextMgr.h"
@@ -1535,6 +1536,10 @@ void PlayerbotAI::DoNextAction(bool min)
         aiObjectContext->GetValue<ObjectGuid>("pull target")->Set(ObjectGuid::Empty);
         aiObjectContext->GetValue<ObjectGuid>("pull strategy target")->Set(ObjectGuid::Empty);
         aiObjectContext->GetValue<LootObject>("loot target")->Set(LootObject());
+
+        // Reset for every death, including after an allied or self resurrection.
+        if (auto* release = dynamic_cast<AutoReleaseSpiritAction*>(aiObjectContext->GetAction("auto release")))
+            release->ResetRecoveryTimer();
 
         ChangeEngine(BOT_STATE_DEAD);
         return;
@@ -4327,6 +4332,33 @@ bool PlayerbotAI::IsInterruptableSpellCasting(Unit* target, std::string const sp
     SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellid);
     if (!spellInfo)
         return false;
+
+    if (sPlayerbotAIConfig.companionCombatRefinement && IsCompanionInventoryManaged(this))
+    {
+        for (uint8 effect = EFFECT_0; effect <= EFFECT_2; ++effect)
+        {
+            bool const interrupt = spellInfo->Effects[effect].Effect == SPELL_EFFECT_INTERRUPT_CAST;
+            bool const silence = spellInfo->Effects[effect].Effect == SPELL_EFFECT_APPLY_AURA &&
+                spellInfo->Effects[effect].ApplyAuraName == SPELL_AURA_MOD_SILENCE;
+            if ((!interrupt && !silence) || target->IsImmunedToSpellEffect(spellInfo, effect))
+                continue;
+            for (auto type : {CURRENT_GENERIC_SPELL, CURRENT_CHANNELED_SPELL})
+            {
+                Spell* current = target->GetCurrentSpell(type);
+                if (!current || (current->getState() != SPELL_STATE_CASTING &&
+                    (current->getState() != SPELL_STATE_PREPARING || current->GetCastTime() <= 0)))
+                    continue;
+                auto const* info = current->m_spellInfo;
+                if (info->PreventionType != SPELL_PREVENTION_TYPE_SILENCE)
+                    continue;
+                if (silence || (type == CURRENT_GENERIC_SPELL ?
+                    (info->InterruptFlags & SPELL_INTERRUPT_FLAG_INTERRUPT) != 0 :
+                    (info->ChannelInterruptFlags & CHANNEL_INTERRUPT_FLAG_INTERRUPT) != 0))
+                    return true;
+            }
+        }
+        return false;
+    }
 
     for (uint8 i = EFFECT_0; i <= EFFECT_2; i++)
     {

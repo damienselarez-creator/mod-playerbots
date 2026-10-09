@@ -761,6 +761,12 @@ bool PlayerbotAIConfig::Initialize()
     selfBotLevel = std::min<int32>(2, sConfigMgr->GetOption<int32>("AiPlayerbot.SelfBotLevel", 1));
 
     companionOnly = sConfigMgr->GetOption<bool>("AiPlayerbot.CompanionOnly", true);
+    companionAutoRelease = sConfigMgr->GetOption<bool>("AiPlayerbot.CompanionAutoRelease", false);
+    companionSyncLevel = sConfigMgr->GetOption<bool>("AiPlayerbot.CompanionSyncLevel", false);
+    companionCombatRefinement = sConfigMgr->GetOption<bool>("AiPlayerbot.CompanionCombatRefinement", false);
+    companionTankPriorities = sConfigMgr->GetOption<bool>("AiPlayerbot.CompanionTankPriorities", false);
+    LOG_INFO("playerbots", "Companion refinement: level sync={}, tank priorities={}",
+        companionSyncLevel, companionTankPriorities);
     companionGuid = sConfigMgr->GetOption<uint32>("AiPlayerbot.CompanionGuid", 0);
     if (companionOnly)
     {
@@ -772,7 +778,8 @@ bool PlayerbotAIConfig::Initialize()
         allowAccountBots = true;
         allowGuildBots = false;
         allowTrustedAccountBots = false;
-        maxAddedBots = 1;
+        maxAddedBots = std::clamp<int32>(
+            sConfigMgr->GetOption<int32>("AiPlayerbot.CompanionMaxCount", 1), 1, 4);
         minRandomBots = 0;
         maxRandomBots = 0;
         randomBotAccountCount = 0;

@@ -5,6 +5,8 @@
  */
 
 #include "GenericWarlockStrategy.h"
+#include "CompanionErrands.h"
+#include "Playerbots.h"
 
 GenericWarlockStrategy::GenericWarlockStrategy(PlayerbotAI* botAI) : CombatStrategy(botAI)
 {
@@ -19,12 +21,13 @@ std::vector<NextAction> GenericWarlockStrategy::getDefaultActions()
 void GenericWarlockStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
     CombatStrategy::InitTriggers(triggers);
+    bool const refined = sPlayerbotAIConfig.companionCombatRefinement && IsCompanionInventoryManaged(botAI);
 
     triggers.push_back(
         new TriggerNode(
             "low mana",
             {
-                NextAction("life tap", 95.0f)
+                NextAction("life tap", refined ? ACTION_HIGH + 3 : 95.0f)
             }
         )
     );

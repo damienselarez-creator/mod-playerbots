@@ -32,7 +32,61 @@
 #include "ServerScript.h"
 #include "SessionScript.h"
 #include "WorldScript.h"
+#include "ObjectAccessor.h"
+#include "CompanionLevelPolicy.h"
+#include <shared_mutex>
 #include "cmath"
+
+class CompanionLevelSync
+{
+public:
+    static Player* Master(Player* bot)
+    {
+        if (!sPlayerbotAIConfig.companionSyncLevel || !bot || !bot->IsInWorld() ||
+            !bot->GetSession() || !bot->GetSession()->IsHeadless())
+            return nullptr;
+        PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
+        Player* master = ai ? ai->GetMaster() : nullptr;
+        if (!master || master == bot || !master->IsInWorld() || !master->GetSession() ||
+            master->GetSession()->IsHeadless() ||
+            master->GetSession()->GetAccountId() != bot->GetSession()->GetAccountId() ||
+            !bot->GetGroup() || bot->GetGroup() != master->GetGroup())
+            return nullptr;
+        return master;
+    }
+
+    static void Update()
+    {
+        std::vector<ObjectGuid> candidates;
+        {
+            std::shared_lock<std::shared_mutex> lock(*HashMapHolder<Player>::GetLock());
+            for (auto const& entry : ObjectAccessor::GetPlayers())
+                candidates.push_back(entry.first);
+        }
+        for (ObjectGuid guid : candidates)
+        {
+            Player* bot = ObjectAccessor::FindPlayer(guid);
+            Player* master = Master(bot);
+            if (!master || bot->GetMap() != master->GetMap() || !bot->IsAlive() || !master->IsAlive() ||
+                bot->IsInCombat() || master->IsInCombat() || bot->isMoving() || master->isMoving() ||
+                bot->IsBeingTeleported() || master->IsBeingTeleported() || bot->IsInFlight() ||
+                master->IsInFlight() || bot->InBattleground() || bot->InArena() ||
+                bot->IsNonMeleeSpellCast(false) || master->IsNonMeleeSpellCast(false))
+                continue;
+            uint8 const oldLevel = bot->GetLevel();
+            uint8 const target = CompanionLevelPolicy::CatchUp(oldLevel, master->GetLevel());
+            if (target == oldLevel)
+                continue;
+            bot->GiveLevel(target);
+            if (bot->GetLevel() != target)
+                continue;
+            bot->SetUInt32Value(PLAYER_XP, 0);
+            GET_PLAYERBOT_AI(bot)->ResetStrategies();
+            LOG_INFO("playerbots", "Companion {} caught up from level {} to {}",
+                bot->GetGUID().GetCounter(), oldLevel, target);
+        }
+    }
+};
 
 class PlayerbotsDatabaseScript : public DatabaseScript
 {
@@ -371,6 +425,12 @@ public:
 
     void OnPlayerGiveXP(Player* player, uint32& amount, Unit* /*victim*/, uint8 /*xpSource*/) override
     {
+        if (Player* master = CompanionLevelSync::Master(player))
+        {
+            amount = CompanionLevelPolicy::LimitXP(player->GetLevel(), master->GetLevel(),
+                player->GetUInt32Value(PLAYER_XP), player->GetUInt32Value(PLAYER_NEXT_LEVEL_XP), amount);
+            return;
+        }
         // early return
         if (sPlayerbotAIConfig.randomBotXPRate == 1.0 || !player)
             return;
@@ -554,6 +614,15 @@ public:
         sRandomPlayerbotMgr.UpdateSessions();  // Per-bot packet queues, world thread only
         PlayerbotWorldThreadProcessor::instance().Update(diff);
         sRandomPlayerbotMgr.UpdateAI(diff);  // World thread only
+        if (!sPlayerbotAIConfig.companionSyncLevel)
+            return;
+        if (diff < _companionSyncTimer)
+        {
+            _companionSyncTimer -= diff;
+            return;
+        }
+        _companionSyncTimer = 10000;
+        CompanionLevelSync::Update();
     }
 
     // Runs before the sessions are kicked on server shutdown
@@ -563,6 +632,9 @@ public:
         sRandomPlayerbotMgr.LogoutAllBots();
         PlayerbotHolder::ClearPendingLogins();
     }
+
+private:
+    uint32 _companionSyncTimer = 10000;
 };
 
 class PlayerBotsBGScript : public BGScript

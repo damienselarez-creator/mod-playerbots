@@ -105,6 +105,10 @@ public:
 
     bool enabled;
     bool companionOnly = true;
+    bool companionAutoRelease = false;
+    bool companionSyncLevel = false;
+    bool companionTankPriorities = false;
+    bool companionCombatRefinement = false;
     uint32 companionGuid = 0;
     bool disabledWithoutRealPlayer;
     bool EnableICCBuffs;

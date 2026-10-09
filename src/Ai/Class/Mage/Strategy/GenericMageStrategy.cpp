@@ -7,6 +7,7 @@
 #include "GenericMageStrategy.h"
 #include "AiFactory.h"
 #include "Playerbots.h"
+#include "CompanionErrands.h"
 #include "RangedCombatStrategy.h"
 
 namespace
@@ -91,6 +92,7 @@ GenericMageStrategy::GenericMageStrategy(PlayerbotAI* botAI) : RangedCombatStrat
 void GenericMageStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
     RangedCombatStrategy::InitTriggers(triggers);
+    bool const refined = sPlayerbotAIConfig.companionCombatRefinement && IsCompanionInventoryManaged(botAI);
 
     // Threat Triggers
     triggers.push_back(new TriggerNode("high threat", { NextAction("mirror image", 60.0f) }));
@@ -107,19 +109,28 @@ void GenericMageStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // Mana Threshold Triggers
     Player* bot = botAI->GetBot();
     if (bot->HasSpell(SPELL_CONJURE_MANA_SAPPHIRE))
-        triggers.push_back(new TriggerNode("high mana", { NextAction("use mana sapphire", 90.0f) }));
+        triggers.push_back(new TriggerNode("high mana",
+            { NextAction("use mana sapphire", refined ? ACTION_HIGH + 3 : 90.0f) }));
     else if (bot->HasSpell(SPELL_CONJURE_MANA_EMERALD))
-        triggers.push_back(new TriggerNode("high mana", { NextAction("use mana emerald", 90.0f) }));
+        triggers.push_back(new TriggerNode("high mana",
+            { NextAction("use mana emerald", refined ? ACTION_HIGH + 3 : 90.0f) }));
     else if (bot->HasSpell(SPELL_CONJURE_MANA_RUBY))
-        triggers.push_back(new TriggerNode("high mana", { NextAction("use mana ruby", 90.0f) }));
+        triggers.push_back(new TriggerNode("high mana",
+            { NextAction("use mana ruby", refined ? ACTION_HIGH + 3 : 90.0f) }));
     else if (bot->HasSpell(SPELL_CONJURE_MANA_CITRINE))
-        triggers.push_back(new TriggerNode("high mana", { NextAction("use mana citrine", 90.0f) }));
+        triggers.push_back(new TriggerNode("high mana",
+            { NextAction("use mana citrine", refined ? ACTION_HIGH + 3 : 90.0f) }));
     else if (bot->HasSpell(SPELL_CONJURE_MANA_JADE))
-        triggers.push_back(new TriggerNode("high mana", { NextAction("use mana jade", 90.0f) }));
+        triggers.push_back(new TriggerNode("high mana",
+            { NextAction("use mana jade", refined ? ACTION_HIGH + 3 : 90.0f) }));
     else if (bot->HasSpell(SPELL_CONJURE_MANA_AGATE))
-        triggers.push_back(new TriggerNode("high mana", { NextAction("use mana agate", 90.0f) }));
+        triggers.push_back(new TriggerNode("high mana",
+            { NextAction("use mana agate", refined ? ACTION_HIGH + 3 : 90.0f) }));
 
-    triggers.push_back(new TriggerNode("low mana", { NextAction("evocation", 90.0f) }));
+    triggers.push_back(new TriggerNode("low mana", { NextAction("evocation", refined ? ACTION_HIGH + 2 : 90.0f) }));
+
+    if (refined)
+        triggers.push_back(new TriggerNode("counterspell", { NextAction("counterspell", ACTION_INTERRUPT + 2) }));
 
     // Counterspell / Spellsteal Triggers
     triggers.push_back(new TriggerNode("spellsteal", { NextAction("spellsteal", 40.0f) }));

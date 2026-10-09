@@ -5,6 +5,7 @@
  */
 
 #include "TankWarriorStrategy.h"
+#include "PlayerbotAIConfig.h"
 
 class TankWarriorStrategyActionNodeFactory : public NamedObjectFactory<ActionNode>
 {
@@ -48,7 +49,8 @@ private:
         return new ActionNode(
             "last stand",
             /*P*/ {},
-            /*A*/ { NextAction("intimidating shout") },
+            /*A*/ sPlayerbotAIConfig.companionTankPriorities ? std::vector<NextAction>{} :
+                std::vector<NextAction>{ NextAction("intimidating shout") },
             /*C*/ {}
         );
     }
@@ -122,6 +124,7 @@ std::vector<NextAction> TankWarriorStrategy::getDefaultActions()
 void TankWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
     GenericWarriorStrategy::InitTriggers(triggers);
+    bool const refined = sPlayerbotAIConfig.companionTankPriorities;
 
     triggers.push_back(
         new TriggerNode(
@@ -135,8 +138,8 @@ void TankWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "enemy out of melee",
             {
-                NextAction("heroic throw", ACTION_MOVE + 11),
-                NextAction("charge", ACTION_MOVE + 10)
+                NextAction("heroic throw", refined ? ACTION_MOVE + 2 : ACTION_MOVE + 11),
+                NextAction("charge", refined ? ACTION_MOVE + 1 : ACTION_MOVE + 10)
             }
         )
     );
@@ -145,7 +148,7 @@ void TankWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "thunder clap and rage",
             {
-                NextAction("thunder clap", ACTION_MOVE + 11)
+                NextAction("thunder clap", refined ? ACTION_HIGH + 6 : ACTION_MOVE + 11)
             }
         )
     );
@@ -185,7 +188,7 @@ void TankWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "medium rage available",
             {
-                NextAction("shield slam", ACTION_HIGH + 2),
+                NextAction("shield slam", refined ? ACTION_HIGH + 5 : ACTION_HIGH + 2),
                 NextAction("devastate", ACTION_HIGH + 1)
             }
         )
@@ -202,7 +205,7 @@ void TankWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "revenge",
             {
-                NextAction("revenge", ACTION_HIGH + 2)
+                NextAction("revenge", refined ? ACTION_HIGH + 4 : ACTION_HIGH + 2)
             }
         )
     );
@@ -234,7 +237,7 @@ void TankWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "low health",
             {
-                NextAction("shield wall", ACTION_MEDIUM_HEAL)
+                NextAction("shield wall", refined ? ACTION_EMERGENCY + 1 : ACTION_MEDIUM_HEAL)
             }
         )
     );
@@ -267,7 +270,7 @@ void TankWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "shield bash",
             {
-                NextAction("shield bash", ACTION_INTERRUPT)
+                NextAction("shield bash", refined ? ACTION_INTERRUPT + 3 : ACTION_INTERRUPT)
             }
         )
     );
@@ -275,7 +278,7 @@ void TankWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "shield bash on enemy healer",
             {
-                NextAction("shield bash on enemy healer", ACTION_INTERRUPT)
+                NextAction("shield bash on enemy healer", refined ? ACTION_INTERRUPT + 2 : ACTION_INTERRUPT)
             }
         )
     );
@@ -291,7 +294,7 @@ void TankWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "victory rush",
             {
-                NextAction("victory rush", ACTION_INTERRUPT)
+                NextAction("victory rush", refined ? ACTION_HIGH + 3 : ACTION_INTERRUPT)
             }
         )
     );
@@ -299,7 +302,7 @@ void TankWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "sword and board",
             {
-                NextAction("shield slam", ACTION_INTERRUPT)
+                NextAction("shield slam", refined ? ACTION_HIGH + 7 : ACTION_INTERRUPT)
             }
         )
     );

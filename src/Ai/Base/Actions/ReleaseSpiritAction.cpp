@@ -6,6 +6,7 @@
 
 #include "ReleaseSpiritAction.h"
 #include "Corpse.h"
+#include "CompanionRecoveryPolicy.h"
 #include "Event.h"
 #include "GameGraveyard.h"
 #include "Log.h"
@@ -113,6 +114,9 @@ bool AutoReleaseSpiritAction::isUseful()
     if (bot->HasPlayerFlag(PLAYER_FLAGS_GHOST))
         return false;
 
+    if (IsAutonomousCompanion(botAI))
+        return ShouldReleaseCompanion();
+
     return ShouldAutoRelease();
 }
 
@@ -164,6 +168,46 @@ bool AutoReleaseSpiritAction::HandleBattlegroundSpiritHealer()
     }
 
     return true;
+}
+
+bool AutoReleaseSpiritAction::IsAutonomousCompanion(PlayerbotAI* ai)
+{
+    Player* companion = ai->GetBot();
+    Player* master = ai->GetMaster();
+    return sPlayerbotAIConfig.companionAutoRelease && !IsSelfBot(companion) && IsRealPlayer(master) &&
+        companion->GetSession() && master->GetSession() &&
+        companion->GetSession()->GetAccountId() == master->GetSession()->GetAccountId();
+}
+
+bool AutoReleaseSpiritAction::ShouldReleaseCompanion() const
+{
+    bool livingAlly = false;
+    bool resurrectionClass = false;
+    bool combat = bot->IsInCombat();
+    auto inspect = [&](Player* member)
+    {
+        if (!member || member == bot || !member->IsInWorld() || !member->IsAlive() ||
+            !member->IsWithinDistInMap(bot, sPlayerbotAIConfig.sightDistance))
+            return;
+
+        livingAlly = true;
+        combat = combat || member->IsInCombat();
+        // Class is a conservative hint, not proof of a learned or affordable spell.
+        // The wait is bounded even if this ally cannot actually resurrect us.
+        uint8 playerClass = member->getClass();
+        resurrectionClass = resurrectionClass || playerClass == CLASS_PRIEST ||
+            playerClass == CLASS_PALADIN || playerClass == CLASS_SHAMAN || playerClass == CLASS_DRUID;
+    };
+
+    inspect(botAI->GetMaster());
+    if (Group* group = bot->GetGroup())
+        for (GroupReference* member = group->GetFirstMember(); member; member = member->next())
+            inspect(member->GetSource());
+
+    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::steady_clock::now() - _deathStarted).count();
+    return CompanionRecoveryPolicy::ShouldRelease(static_cast<uint32>(elapsed), combat,
+        bot->isResurrectRequested(), livingAlly, resurrectionClass);
 }
 
 bool AutoReleaseSpiritAction::ShouldAutoRelease() const

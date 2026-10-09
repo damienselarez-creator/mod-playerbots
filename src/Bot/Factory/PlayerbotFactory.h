@@ -194,7 +194,8 @@ private:
     void ClearSpells();
     void ClearSkills();
     void InitTalents(uint32 specNo);
-    void InitTalentsByTemplate(uint32 specNo);
+    void InitTalentsByTemplate(uint32 specNo, bool primaryOnly = false);
+    void InitCompanionTalents(uint32 specNo, uint32 targetPoints);
     void InitQuests(std::list<uint32>& questMap, bool withRewardItem = true);
     void ClearInventory();
     void ClearAllItems();
